@@ -1,0 +1,5 @@
+LIBRARY bridge
+EXPORTS
+    Bridge_Initialize
+    Bridge_Disable
+    Bridge_Shutdown

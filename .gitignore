@@ -1,0 +1,13 @@
+/build/
+/out/
+/CMakeUserPresets.json
+*.user
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+.vs/
+.idea/
+cmake-build-*/
+logs/
