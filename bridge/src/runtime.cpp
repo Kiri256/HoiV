@@ -108,6 +108,7 @@ RuntimeConfig config_from_block(const SharedBlock* block) {
     }
     cfg.enabled = block->enabled;
     cfg.read_only = block->read_only;
+    cfg.skip_theatre_ai = block->skip_theatre_ai;
     cfg.max_orders_per_hour = block->max_orders_per_hour;
     cfg.exe_path = block->exe_path;
     cfg.expected_sha256_hex = block->expected_sha256_hex;
@@ -221,8 +222,8 @@ uint32_t initialize_once() {
         ErrorCode::Ok,
         test_host ? "version gate passed; writes remain disabled; live read skipped on test host"
                   : (block->write_enabled != 0
-                        ? "version gate passed; PeekMessageW sample armed; writes gated on TestMove"
-                        : "version gate passed; writes remain disabled; PeekMessageW sample armed"));
+                        ? "version gate passed; sample armed"
+                        : "version gate passed; writes remain disabled; sample armed"));
     arm_control_events();
     start_control_thread();
     ipc_publish_ready(&g_ipc);

@@ -35,12 +35,32 @@ uint8_t g_saved_front_factory[adapter::kFrontFactoryHookBytes] {};
 uint8_t g_saved_front_tick[adapter::kFrontTickHookBytes] {};
 uint8_t g_saved_ag_factory[adapter::kArmyGroupFactoryHookBytes] {};
 uint8_t g_saved_mil_create[adapter::kMilitaryMinisterCreateHookBytes] {};
+uint8_t g_saved_probe_move[adapter::kLandActorMoveHookBytes] {};
+uint8_t g_saved_probe_mass[adapter::kLandActorMassHookBytes] {};
+uint8_t g_saved_mass_move_can[adapter::kCMassMoveCommandCanHookBytes] {};
+uint8_t g_saved_probe_exec[adapter::kLandActorExecHookBytes] {};
+uint8_t g_saved_probe_vol[adapter::kCAIVolunteerGeneralTickHookBytes] {};
+uint8_t g_saved_probe_org[adapter::kLandOrgHelperHookBytes] {};
+uint8_t g_saved_general_org[adapter::kCAIGeneralOrgHookBytes] {};
+uint8_t g_saved_theatre_can[adapter::kCSetTheatreCommandCanHookBytes] {};
+uint8_t g_saved_ag_can[adapter::kCArmyGroupCommandCanHookBytes] {};
+uint8_t g_saved_assign_ag_can[adapter::kCAssignToArmyGroupCommandCanHookBytes] {};
+uint8_t g_saved_front_can[adapter::kCOrderNewFrontCommandCanHookBytes] {};
+uint8_t g_saved_theatre_ai[adapter::kTheatreAiCreateHookBytes] {};
+uint8_t g_saved_theatre_gate[adapter::kTheatreCreateGateHookBytes] {};
+uint8_t g_saved_theatre_ctor[adapter::kCTheatreCtorHookBytes] {};
+uint8_t g_saved_area_def_ai[adapter::kAreaDefenseAiHookBytes] {};
+uint8_t g_saved_ag_ai[adapter::kArmyGroupAiHookBytes] {};
+uint8_t g_saved_army_ai[adapter::kArmyAiHookBytes] {};
+uint8_t g_saved_army_ai2[adapter::kArmyAi2HookBytes] {};
+uint8_t g_saved_order_group_can[adapter::kCOrderGroupCommandCanHookBytes] {};
 std::atomic<bool> g_armed {false};
 std::atomic<bool> g_patched {false};
 std::atomic<bool> g_iat_patched {false};
 std::atomic<bool> g_move_patched {false};
 std::atomic<bool> g_general_patched {false};
 std::atomic<bool> g_org_patched {false};
+std::atomic<bool> g_probe_patched {false};
 using PeekMessageWFn = BOOL (WINAPI*)(LPMSG, HWND, UINT, UINT, UINT);
 PeekMessageWFn g_orig_peek_message = nullptr;
 uint64_t* g_peek_iat = nullptr;
@@ -72,15 +92,88 @@ uint8_t* g_ag_factory_tramp = nullptr;
 using MinisterCreateFn = void(HOIV_MSABI*)(void*);
 MinisterCreateFn g_orig_mil_create = nullptr;
 uint8_t* g_mil_create_tramp = nullptr;
+using LandActorProbeFn = uint64_t(HOIV_MSABI*)(void*, void*, void*, void*);
+LandActorProbeFn g_orig_probe_move = nullptr;
+LandActorProbeFn g_orig_probe_mass = nullptr;
+LandActorProbeFn g_orig_probe_exec = nullptr;
+LandActorProbeFn g_orig_probe_org = nullptr;
+LandActorProbeFn g_orig_general_org = nullptr;
+GeneralTickFn g_orig_probe_vol = nullptr;
+using MassMoveCanFn = uint8_t(HOIV_MSABI*)(void*);
+MassMoveCanFn g_orig_mass_move_can = nullptr;
+using OrgCommandCanFn = uint8_t(HOIV_MSABI*)(void*);
+OrgCommandCanFn g_orig_theatre_can = nullptr;
+OrgCommandCanFn g_orig_ag_can = nullptr;
+OrgCommandCanFn g_orig_assign_ag_can = nullptr;
+OrgCommandCanFn g_orig_front_can = nullptr;
+OrgCommandCanFn g_orig_order_group_can = nullptr;
+LandActorProbeFn g_orig_theatre_ai = nullptr;
+LandActorProbeFn g_orig_theatre_gate = nullptr;
+LandActorProbeFn g_orig_theatre_ctor = nullptr;
+LandActorProbeFn g_orig_area_def_ai = nullptr;
+LandActorProbeFn g_orig_ag_ai = nullptr;
+LandActorProbeFn g_orig_army_ai = nullptr;
+LandActorProbeFn g_orig_army_ai2 = nullptr;
+uint8_t* g_probe_move_tramp = nullptr;
+uint8_t* g_probe_mass_tramp = nullptr;
+uint8_t* g_probe_exec_tramp = nullptr;
+uint8_t* g_probe_vol_tramp = nullptr;
+uint8_t* g_probe_org_tramp = nullptr;
+uint8_t* g_general_org_tramp = nullptr;
+uint8_t* g_mass_move_can_tramp = nullptr;
+uint8_t* g_theatre_can_tramp = nullptr;
+uint8_t* g_ag_can_tramp = nullptr;
+uint8_t* g_assign_ag_can_tramp = nullptr;
+uint8_t* g_front_can_tramp = nullptr;
+uint8_t* g_theatre_ai_tramp = nullptr;
+uint8_t* g_theatre_gate_tramp = nullptr;
+uint8_t* g_theatre_ctor_tramp = nullptr;
+uint8_t* g_area_def_ai_tramp = nullptr;
+uint8_t* g_ag_ai_tramp = nullptr;
+uint8_t* g_army_ai_tramp = nullptr;
+uint8_t* g_army_ai2_tramp = nullptr;
+uint8_t* g_order_group_can_tramp = nullptr;
+std::atomic<uint32_t> g_probe_move_enters {0};
+std::atomic<uint32_t> g_probe_mass_enters {0};
+std::atomic<uint32_t> g_probe_exec_enters {0};
+std::atomic<uint32_t> g_probe_vol_enters {0};
+std::atomic<int32_t> g_probe_exec_tag {0};
+std::atomic<uint32_t> g_probe_exec_vt0 {0};
+std::atomic<uint32_t> g_probe_exec_vt1 {0};
+std::atomic<uint32_t> g_probe_exec_vt2 {0};
+std::atomic<uint32_t> g_probe_mass_vt {0};
+std::atomic<int32_t> g_probe_mass_tag {0};
+std::atomic<uint32_t> g_probe_move_vt {0};
+std::atomic<int32_t> g_probe_move_tag {0};
+std::atomic<uint32_t> g_probe_mass_skips {0};
+std::atomic<uint32_t> g_probe_move_skips {0};
+std::atomic<uint32_t> g_probe_vol_vt {0};
+std::atomic<int32_t> g_probe_vol_tag {0};
+std::atomic<uint32_t> g_probe_vol_skips {0};
+std::atomic<uint32_t> g_probe_org_enters {0};
+std::atomic<uint32_t> g_probe_org_vt {0};
+std::atomic<int32_t> g_probe_org_tag {0};
+std::atomic<uint32_t> g_probe_org_skips {0};
+std::atomic<uint32_t> g_probe_exec_skips {0};
+std::atomic<uint32_t> g_probe_ag_enters {0};
+std::atomic<uint32_t> g_probe_ag_vt {0};
+std::atomic<int32_t> g_probe_ag_tag {0};
+std::atomic<uint32_t> g_probe_ag_skips {0};
 std::atomic<bool> g_restored_global_ai {false};
 thread_local bool g_allow_our_move = false;
 thread_local bool g_allow_our_org = false;
+thread_local bool g_skip_german_mass_move = false;
+thread_local bool g_skip_german_org_create = false;
+thread_local int32_t g_org_create_tag = 0;
 uint64_t g_major_handle_hash[2][adapter::kMajorHandleHashSlots] {};
 std::atomic<uint32_t> g_major_handle_sel {0};
 uint32_t g_last_handle_snapshot_ms = 0;
 
-void try_submit_swiss_move(uint64_t army, int32_t from_province, int32_t handle_id, int32_t handle_gen);
+void try_submit_test_move(uint64_t army, int32_t from_province, int32_t handle_id, int32_t handle_gen);
+void try_submit_test_army(uint64_t country, uint64_t army);
+void try_submit_test_army_group(uint64_t country);
 void try_submit_swiss_cancel(uint64_t army, int32_t handle_id, int32_t handle_gen);
+uint64_t country_by_tag(const uint64_t* countries, int32_t country_size, int32_t tag);
 void try_suppress_major_land_ai(uint64_t gamestate);
 void hold_land_ai_if_armed(uint64_t gamestate);
 void sample_land_ai_global();
@@ -93,6 +186,9 @@ bool patch_org_create();
 void restore_org_create();
 bool patch_move_gate();
 void restore_move_gate();
+bool patch_land_actor_probes();
+void restore_land_actor_probes();
+void reset_land_actor_probes();
 
 uint64_t module_va(uint32_t rva) {
     return reinterpret_cast<uint64_t>(g_module_base) + rva;
@@ -545,7 +641,7 @@ bool load_armies(uint64_t country, uint64_t* data_out, int32_t* size_out) {
     return true;
 }
 
-bool pick_swiss_from_units(
+bool pick_located_army(
     uint64_t data,
     int32_t size,
     int32_t want_id,
@@ -564,6 +660,9 @@ bool pick_swiss_from_units(
     uint64_t tracked = 0;
     int32_t tracked_id = 0;
     int32_t tracked_prov = 0;
+    uint64_t first = 0;
+    int32_t first_id = 0;
+    int32_t first_prov = 0;
     for (int32_t u = 0; u < size; ++u) {
         const int32_t prov = read_province(units[u]);
         if (prov == 0) {
@@ -580,17 +679,20 @@ bool pick_swiss_from_units(
             tracked_id = handle_id;
             tracked_prov = prov;
         }
-        if (prov == adapter::kStGallenProvince) {
-            chosen = units[u];
-            chosen_id = have_handle ? handle_id : 0;
-            chosen_prov = prov;
-            break;
+        if (first == 0 && have_handle && adapter::army_handle_usable(handle_id, handle_gen)) {
+            first = units[u];
+            first_id = handle_id;
+            first_prov = prov;
         }
     }
-    if (chosen == 0 && tracked != 0) {
+    if (tracked != 0) {
         chosen = tracked;
         chosen_id = tracked_id;
         chosen_prov = tracked_prov;
+    } else {
+        chosen = first;
+        chosen_id = first_id;
+        chosen_prov = first_prov;
     }
     *division_id = chosen_id;
     *province = chosen_prov;
@@ -600,26 +702,13 @@ bool pick_swiss_from_units(
     return chosen != 0;
 }
 
-bool pick_swiss_unit(
-    uint64_t country,
-    int32_t* division_id,
-    int32_t* province,
-    int32_t* located,
-    int32_t* armies_out) {
-    uint64_t army_data = 0;
-    int32_t army_size = 0;
-    if (!load_armies(country, &army_data, &army_size)) {
-        return false;
-    }
-    if (armies_out != nullptr) {
-        *armies_out = army_size;
-    }
-    return pick_swiss_from_units(
-        army_data, army_size, g_track_id, g_track_gen, division_id, province, located, nullptr);
-}
-
 bool capture_from_gamestate(uint64_t gamestate, adapter::LiveRead* out) {
     *out = {};
+    SharedBlock* retired = g_block;
+    if (retired != nullptr && retired->request == static_cast<uint32_t>(Request::TestCancel)) {
+        retired->last_order_result = static_cast<uint32_t>(OrderResult::Gated);
+        retired->request = static_cast<uint32_t>(Request::None);
+    }
     if (!user_object(gamestate) ||
         !page_readable(gamestate, adapter::kPlayerTagOffset + 16)) {
         return false;
@@ -650,9 +739,6 @@ bool capture_from_gamestate(uint64_t gamestate, adapter::LiveRead* out) {
     }
 
     const uint64_t* countries = reinterpret_cast<const uint64_t*>(country_data);
-    int32_t found = -1;
-    uint64_t country = 0;
-    uint32_t match_off = 0;
 
     const uint64_t idler_slot = module_va(adapter::kCGameIdlerSingletonRva);
     if (page_readable(idler_slot, 8)) {
@@ -663,50 +749,40 @@ bool capture_from_gamestate(uint64_t gamestate, adapter::LiveRead* out) {
                 out->diag_actor_rva =
                     static_cast<uint32_t>(idler_vt - reinterpret_cast<uint64_t>(g_module_base));
             }
-            if (page_readable(idler + adapter::kIdlerCountryOffset, 8)) {
-                const int32_t pinned = index_of_country(
-                    *reinterpret_cast<const uint64_t*>(idler + adapter::kIdlerCountryOffset),
-                    countries,
-                    country_size);
-                if (pinned > 0) {
-                    found = pinned;
-                    country = countries[found];
-                    match_off = adapter::kIdlerCountryOffset;
-                }
-            }
         }
     }
 
-    out->diag_vote_idx = found;
-    out->diag_vote_n = match_off;
+    out->diag_vote_idx = -1;
+    out->diag_vote_n = 0;
 
-    int32_t swiss_id = 0;
-    int32_t swiss_prov = 0;
-    int32_t swiss_units = 0;
-    int32_t swiss_armies = 0;
-    const int32_t swiss_idx = adapter::kSwissTestCountryTag;
-    if (swiss_idx > 0 && swiss_idx < country_size && vtable_in_image(countries[swiss_idx]) &&
-        page_readable(countries[swiss_idx], adapter::kCountryTagOffset + 4) &&
-        *reinterpret_cast<const int32_t*>(countries[swiss_idx] + adapter::kCountryTagOffset) ==
-            swiss_idx) {
-        found = swiss_idx;
-        country = countries[swiss_idx];
+    int32_t found = -1;
+    uint64_t country = 0;
+    int32_t army_id = 0;
+    int32_t army_prov = 0;
+    int32_t army_units = 0;
+    int32_t army_count = 0;
+    uint64_t unit = 0;
+    int32_t handle_gen = 0;
+    const int32_t sample_tag = adapter::kLiveSampleCountryTag;
+    const uint64_t sample = country_by_tag(countries, country_size, sample_tag);
+    if (sample != 0) {
+        found = sample_tag;
+        country = sample;
         uint64_t army_data = 0;
         int32_t army_size = 0;
         if (load_armies(country, &army_data, &army_size)) {
-            swiss_armies = army_size;
-            uint64_t swiss_unit = 0;
-            pick_swiss_from_units(
+            army_count = army_size;
+            pick_located_army(
                 army_data,
                 army_size,
                 g_track_id,
                 g_track_gen,
-                &swiss_id,
-                &swiss_prov,
-                &swiss_units,
-                &swiss_unit);
-            if (swiss_unit != 0 && page_readable(swiss_unit, 8)) {
-                const uint64_t unit_vt = *reinterpret_cast<const uint64_t*>(swiss_unit);
+                &army_id,
+                &army_prov,
+                &army_units,
+                &unit);
+            if (unit != 0 && page_readable(unit, 8)) {
+                const uint64_t unit_vt = *reinterpret_cast<const uint64_t*>(unit);
                 if (in_module(unit_vt, 8)) {
                     out->diag_vote_n =
                         static_cast<uint32_t>(unit_vt - reinterpret_cast<uint64_t>(g_module_base));
@@ -716,7 +792,7 @@ bool capture_from_gamestate(uint64_t gamestate, adapter::LiveRead* out) {
                 int64_t hp_cur = 0;
                 int64_t hp_max = 0;
                 if (read_army_stat_pair(
-                        swiss_unit,
+                        unit,
                         adapter::kArmyOrgCurrentOffset,
                         adapter::kArmyStatsMaxOrgOffset,
                         &org_cur,
@@ -727,7 +803,7 @@ bool capture_from_gamestate(uint64_t gamestate, adapter::LiveRead* out) {
                     out->org_valid = 1;
                 }
                 if (read_army_stat_pair(
-                        swiss_unit,
+                        unit,
                         adapter::kArmyHpCurrentOffset,
                         adapter::kArmyStatsMaxHpOffset,
                         &hp_cur,
@@ -737,24 +813,26 @@ bool capture_from_gamestate(uint64_t gamestate, adapter::LiveRead* out) {
                     out->hp = static_cast<float>(adapter::fixed_point_to_display(hp_cur));
                 }
                 int32_t handle_id = 0;
-                int32_t handle_gen = 0;
-                if (read_army_handle(swiss_unit, &handle_id, &handle_gen)) {
-                    swiss_id = handle_id;
-                    out->division_generation = handle_gen;
-                    if (g_track_id == 0 && swiss_prov == adapter::kStGallenProvince) {
+                int32_t read_gen = 0;
+                if (read_army_handle(unit, &handle_id, &read_gen)) {
+                    army_id = handle_id;
+                    handle_gen = read_gen;
+                    out->division_generation = read_gen;
+                    if (g_track_id == 0) {
                         g_track_id = handle_id;
-                        g_track_gen = handle_gen;
+                        g_track_gen = read_gen;
                     }
-                    try_submit_swiss_move(swiss_unit, swiss_prov, handle_id, handle_gen);
-                    try_submit_swiss_cancel(swiss_unit, handle_id, handle_gen);
                 }
             }
         }
     }
-    out->diag_armies = swiss_armies;
-    out->diag_units = swiss_units;
+    out->diag_armies = army_count;
+    out->diag_units = army_units;
 
-    if (found != swiss_idx || country == 0) {
+    if (found != sample_tag || country == 0) {
+        try_submit_test_move(0, 0, 0, 0);
+        try_submit_test_army(0, 0);
+        try_submit_test_army_group(0);
         return true;
     }
     out->country_ok = 1;
@@ -768,11 +846,14 @@ bool capture_from_gamestate(uint64_t gamestate, adapter::LiveRead* out) {
         adapter::format_country_tag(
             static_cast<uint32_t>(out->player_tag), out->tag_text, sizeof(out->tag_text));
     }
-    if (swiss_prov != 0) {
+    if (army_prov != 0) {
         out->division_ok = 1;
-        out->division_id = swiss_id;
-        out->division_province = swiss_prov;
+        out->division_id = army_id;
+        out->division_province = army_prov;
     }
+    try_submit_test_move(unit, army_prov, army_id, handle_gen);
+    try_submit_test_army(country, unit);
+    try_submit_test_army_group(country);
     return true;
 }
 
@@ -805,6 +886,32 @@ void publish(const adapter::LiveRead& read) {
     block->diag_actor_rva = read.diag_actor_rva;
     block->diag_armies = read.diag_armies;
     block->diag_units = read.diag_units;
+    block->land_actor_move_enters = g_probe_move_enters.load(std::memory_order_relaxed);
+    block->land_actor_mass_enters = g_probe_mass_enters.load(std::memory_order_relaxed);
+    block->land_actor_exec_enters = g_probe_exec_enters.load(std::memory_order_relaxed);
+    block->land_actor_exec_tag = g_probe_exec_tag.load(std::memory_order_relaxed);
+    block->land_actor_exec_vt0 = g_probe_exec_vt0.load(std::memory_order_relaxed);
+    block->land_actor_exec_vt1 = g_probe_exec_vt1.load(std::memory_order_relaxed);
+    block->land_actor_exec_vt2 = g_probe_exec_vt2.load(std::memory_order_relaxed);
+    block->land_actor_mass_vt = g_probe_mass_vt.load(std::memory_order_relaxed);
+    block->land_actor_mass_tag = g_probe_mass_tag.load(std::memory_order_relaxed);
+    block->land_actor_move_vt = g_probe_move_vt.load(std::memory_order_relaxed);
+    block->land_actor_move_tag = g_probe_move_tag.load(std::memory_order_relaxed);
+    block->land_actor_mass_skips = g_probe_mass_skips.load(std::memory_order_relaxed);
+    block->land_actor_move_skips = g_probe_move_skips.load(std::memory_order_relaxed);
+    block->land_actor_vol_enters = g_probe_vol_enters.load(std::memory_order_relaxed);
+    block->land_actor_vol_vt = g_probe_vol_vt.load(std::memory_order_relaxed);
+    block->land_actor_vol_tag = g_probe_vol_tag.load(std::memory_order_relaxed);
+    block->land_actor_vol_skips = g_probe_vol_skips.load(std::memory_order_relaxed);
+    block->land_actor_org_enters = g_probe_org_enters.load(std::memory_order_relaxed);
+    block->land_actor_org_vt = g_probe_org_vt.load(std::memory_order_relaxed);
+    block->land_actor_org_tag = g_probe_org_tag.load(std::memory_order_relaxed);
+    block->land_actor_org_skips = g_probe_org_skips.load(std::memory_order_relaxed);
+    block->land_actor_exec_skips = g_probe_exec_skips.load(std::memory_order_relaxed);
+    block->land_actor_ag_enters = g_probe_ag_enters.load(std::memory_order_relaxed);
+    block->land_actor_ag_vt = g_probe_ag_vt.load(std::memory_order_relaxed);
+    block->land_actor_ag_tag = g_probe_ag_tag.load(std::memory_order_relaxed);
+    block->land_actor_ag_skips = g_probe_ag_skips.load(std::memory_order_relaxed);
     ++block->snapshot_sequence;
     block->snapshot_tick_ms = GetTickCount();
 }
@@ -919,11 +1026,19 @@ void capture_throttled(uint64_t gamestate) {
     }
     const uint32_t now = GetTickCount();
     uint32_t last = g_last_capture_ms.load(std::memory_order_relaxed);
-    if (last != 0 && now - last < adapter::kCaptureMinIntervalMs) {
-        return;
-    }
-    if (!g_last_capture_ms.compare_exchange_strong(last, now, std::memory_order_relaxed)) {
-        return;
+    const bool flush_write = g_block != nullptr &&
+        (g_block->request == static_cast<uint32_t>(Request::TestMove) ||
+         g_block->request == static_cast<uint32_t>(Request::TestArmy) ||
+         g_block->request == static_cast<uint32_t>(Request::TestArmyGroup));
+    if (!flush_write) {
+        if (last != 0 && now - last < adapter::kCaptureMinIntervalMs) {
+            return;
+        }
+        if (!g_last_capture_ms.compare_exchange_strong(last, now, std::memory_order_relaxed)) {
+            return;
+        }
+    } else {
+        g_last_capture_ms.store(now, std::memory_order_relaxed);
     }
     if (g_block != nullptr) {
         ++g_block->hook_enter_count;
@@ -1041,7 +1156,7 @@ void finish_order(SharedBlock* block, OrderResult result) {
     block->request = static_cast<uint32_t>(Request::None);
 }
 
-void try_submit_swiss_move(uint64_t army, int32_t from_province, int32_t handle_id, int32_t handle_gen) {
+void try_submit_test_move(uint64_t army, int32_t from_province, int32_t handle_id, int32_t handle_gen) {
     SharedBlock* block = g_block;
     if (block == nullptr || block->request != static_cast<uint32_t>(Request::TestMove)) {
         return;
@@ -1052,10 +1167,7 @@ void try_submit_swiss_move(uint64_t army, int32_t from_province, int32_t handle_
         finish_order(block, OrderResult::Gated);
         return;
     }
-    int32_t to = block->pending_move_province;
-    if (to == 0) {
-        to = adapter::kSwissTestMoveProvince;
-    }
+    const int32_t to = block->pending_move_province;
     if (army == 0 || !vtable_in_image(army)) {
         finish_order(block, OrderResult::NoArmy);
         return;
@@ -1113,6 +1225,218 @@ void try_submit_swiss_move(uint64_t army, int32_t from_province, int32_t handle_
         return;
     }
     auto exec = reinterpret_cast<DoFn>(vt[adapter::kMoveCommandVtableSlotDo]);
+    if (exec == nullptr) {
+        finish_order(block, OrderResult::Fault);
+        return;
+    }
+    exec(cmd);
+    block->order_accepted = 1;
+    block->last_order_result = static_cast<uint32_t>(OrderResult::Submitted);
+}
+
+bool army_command_signatures_match() {
+    if (g_module_base == nullptr ||
+        !in_module(module_va(adapter::kCOrderGroupCommandCtorBRva), adapter::kCOrderGroupCommandCtorBByteCount) ||
+        !in_module(module_va(adapter::kCOrderGroupCommandCanRva), adapter::kCOrderGroupCommandCanByteCount)) {
+        return false;
+    }
+    return adapter::order_group_ctor_b_bytes_match(g_module_base + adapter::kCOrderGroupCommandCtorBRva);
+}
+
+bool army_group_command_signatures_match() {
+    if (g_module_base == nullptr ||
+        !in_module(module_va(adapter::kCArmyGroupCommandCtorBRva), adapter::kCArmyGroupCommandCtorBByteCount) ||
+        !in_module(module_va(adapter::kCArmyGroupCommandCanRva), adapter::kCArmyGroupCommandCanByteCount)) {
+        return false;
+    }
+    return adapter::army_group_ctor_b_bytes_match(g_module_base + adapter::kCArmyGroupCommandCtorBRva);
+}
+
+uint64_t object_parent(uint64_t object) {
+    if (!user_object(object) ||
+        !page_readable(object + adapter::kUnitParentOffset, 8)) {
+        return 0;
+    }
+    const uint64_t parent = *reinterpret_cast<const uint64_t*>(object + adapter::kUnitParentOffset);
+    if (!vtable_in_image(parent)) {
+        return 0;
+    }
+    return parent;
+}
+
+uint64_t first_group_with_vtable(uint64_t country, uint32_t vtable_rva) {
+    uint64_t data = 0;
+    int32_t size = 0;
+    if (!read_pdx_array(
+            country, adapter::kCountryCommandGroupsOffset, adapter::kMaxArmies, &data, &size) ||
+        size <= 0) {
+        return 0;
+    }
+    const uint64_t want = module_va(vtable_rva);
+    const uint64_t* items = reinterpret_cast<const uint64_t*>(data);
+    for (int32_t i = 0; i < size; ++i) {
+        const uint64_t item = items[i];
+        if (!vtable_in_image(item)) {
+            continue;
+        }
+        if (*reinterpret_cast<const uint64_t*>(item) == want) {
+            return item;
+        }
+    }
+    return 0;
+}
+
+uint64_t parent_for_org(uint64_t member, uint64_t country) {
+    const uint64_t from_member = object_parent(member);
+    if (from_member != 0) {
+        return from_member;
+    }
+    if (country == 0) {
+        return 0;
+    }
+    return first_group_with_vtable(country, adapter::kCTheatreVtableRva);
+}
+
+struct PdxPtrList {
+    uint64_t* data;
+    uint32_t cap;
+    uint32_t size;
+};
+
+void try_submit_test_army(uint64_t country, uint64_t army) {
+    SharedBlock* block = g_block;
+    if (block == nullptr || block->request != static_cast<uint32_t>(Request::TestArmy)) {
+        return;
+    }
+    if (!adapter::writes_allowed(block->enabled, block->read_only, block->max_orders_per_hour) ||
+        block->write_enabled == 0 || block->order_accepted != 0 ||
+        block->order_attempts >= block->max_orders_per_hour) {
+        finish_order(block, OrderResult::Gated);
+        return;
+    }
+    if (army == 0 || !vtable_in_image(army) ||
+        *reinterpret_cast<const uint64_t*>(army) != module_va(adapter::kCArmyVtableRva)) {
+        finish_order(block, OrderResult::NoArmy);
+        return;
+    }
+    const uint64_t parent = parent_for_org(army, country);
+    if (parent == 0) {
+        finish_order(block, OrderResult::BadTarget);
+        return;
+    }
+    if (!army_command_signatures_match()) {
+        finish_order(block, OrderResult::SignatureFailed);
+        return;
+    }
+
+    using CtorB = void*(HOIV_MSABI*)(void*, void*, void*, void*);
+    using CanFn = uint8_t(HOIV_MSABI*)(void*, uint32_t);
+    using DoFn = void(HOIV_MSABI*)(void*);
+
+    ++block->order_attempts;
+    block->request = static_cast<uint32_t>(Request::None);
+
+    struct OurOrgGuard {
+        OurOrgGuard() {
+            g_allow_our_org = true;
+        }
+        ~OurOrgGuard() {
+            g_allow_our_org = false;
+        }
+    } allow_ours;
+
+    uint64_t item = army;
+    PdxPtrList arr {&item, 1, 1};
+
+    alignas(16) uint8_t cmd[adapter::kCOrderGroupCommandBytesSize] {};
+    auto ctor = reinterpret_cast<CtorB>(g_module_base + adapter::kCOrderGroupCommandCtorBRva);
+    ctor(cmd, &arr, reinterpret_cast<void*>(parent), nullptr);
+
+    void** vt = *reinterpret_cast<void***>(cmd);
+    if (vt == nullptr || !in_module(reinterpret_cast<uint64_t>(vt), 88)) {
+        finish_order(block, OrderResult::Fault);
+        return;
+    }
+    auto can = reinterpret_cast<CanFn>(vt[adapter::kCOrderGroupCommandVtableSlotCan]);
+    if (can == nullptr || can(cmd, 0) == 0) {
+        finish_order(block, OrderResult::CanExecuteFalse);
+        return;
+    }
+    auto exec = reinterpret_cast<DoFn>(vt[adapter::kCOrderGroupCommandVtableSlotDo]);
+    if (exec == nullptr) {
+        finish_order(block, OrderResult::Fault);
+        return;
+    }
+    exec(cmd);
+    block->order_accepted = 1;
+    block->last_order_result = static_cast<uint32_t>(OrderResult::Submitted);
+}
+
+void try_submit_test_army_group(uint64_t country) {
+    SharedBlock* block = g_block;
+    if (block == nullptr || block->request != static_cast<uint32_t>(Request::TestArmyGroup)) {
+        return;
+    }
+    if (!adapter::writes_allowed(block->enabled, block->read_only, block->max_orders_per_hour) ||
+        block->write_enabled == 0 || block->order_accepted != 0 ||
+        block->order_attempts >= block->max_orders_per_hour) {
+        finish_order(block, OrderResult::Gated);
+        return;
+    }
+    if (country == 0 || !vtable_in_image(country)) {
+        finish_order(block, OrderResult::NoArmy);
+        return;
+    }
+    const uint64_t group = first_group_with_vtable(country, adapter::kCOrdersGroupVtableRva);
+    if (group == 0) {
+        finish_order(block, OrderResult::NoArmy);
+        return;
+    }
+    // Army group must keep at least one army. Taking the only army empties the source.
+    const uint64_t parent = parent_for_org(group, country);
+    if (parent == 0) {
+        finish_order(block, OrderResult::BadTarget);
+        return;
+    }
+    if (!army_group_command_signatures_match()) {
+        finish_order(block, OrderResult::SignatureFailed);
+        return;
+    }
+
+    using CtorB = void*(HOIV_MSABI*)(void*, void*, void*);
+    using CanFn = uint8_t(HOIV_MSABI*)(void*, uint32_t);
+    using DoFn = void(HOIV_MSABI*)(void*);
+
+    ++block->order_attempts;
+    block->request = static_cast<uint32_t>(Request::None);
+
+    struct OurOrgGuard {
+        OurOrgGuard() {
+            g_allow_our_org = true;
+        }
+        ~OurOrgGuard() {
+            g_allow_our_org = false;
+        }
+    } allow_ours;
+
+    uint64_t item = group;
+    PdxPtrList arr {&item, 1, 1};
+
+    alignas(16) uint8_t cmd[adapter::kCArmyGroupCommandBytesSize] {};
+    auto ctor = reinterpret_cast<CtorB>(g_module_base + adapter::kCArmyGroupCommandCtorBRva);
+    ctor(cmd, &arr, reinterpret_cast<void*>(parent));
+
+    void** vt = *reinterpret_cast<void***>(cmd);
+    if (vt == nullptr || !in_module(reinterpret_cast<uint64_t>(vt), 88)) {
+        finish_order(block, OrderResult::Fault);
+        return;
+    }
+    auto can = reinterpret_cast<CanFn>(vt[adapter::kCArmyGroupCommandVtableSlotCan]);
+    if (can == nullptr || can(cmd, 0) == 0) {
+        finish_order(block, OrderResult::CanExecuteFalse);
+        return;
+    }
+    auto exec = reinterpret_cast<DoFn>(vt[adapter::kCArmyGroupCommandVtableSlotDo]);
     if (exec == nullptr) {
         finish_order(block, OrderResult::Fault);
         return;
@@ -1320,7 +1644,7 @@ uint64_t country_ai_of(uint64_t country) {
     const uint64_t ai =
         *reinterpret_cast<const uint64_t*>(country + adapter::kCountryAiPointerOffset);
     if (!user_object(ai) ||
-        *reinterpret_cast<const uint64_t*>(ai) != module_va(adapter::kCCountryAIVtableRva)) {
+        !adapter::is_country_ai_vtable(*reinterpret_cast<const uint64_t*>(ai), module_va(0))) {
         return 0;
     }
     return ai;
@@ -1341,7 +1665,7 @@ uint64_t country_from_owner(uint64_t owner) {
     }
     const uint64_t ovt = *reinterpret_cast<const uint64_t*>(owner);
     uint64_t country = 0;
-    if (ovt == module_va(adapter::kCCountryAIVtableRva)) {
+    if (adapter::is_country_ai_vtable(ovt, module_va(0))) {
         country = *reinterpret_cast<const uint64_t*>(owner + adapter::kCountryAiCountryOffset);
     } else if (ovt == module_va(adapter::kCCountryVtableRva)) {
         country = owner;
@@ -1366,11 +1690,15 @@ uint64_t country_from_general(void* general) {
     if (general == nullptr || !is_canonical_user_pointer(reinterpret_cast<uint64_t>(general))) {
         return 0;
     }
-    if (*reinterpret_cast<const uint64_t*>(general) != module_va(adapter::kCAIGeneralVtableRva)) {
+    const uint64_t vt = *reinterpret_cast<const uint64_t*>(general);
+    if (!adapter::is_land_general_vtable(vt, module_va(0))) {
         return 0;
     }
-    return country_from_owner(*reinterpret_cast<const uint64_t*>(
-        static_cast<const uint8_t*>(general) + adapter::kCAIGeneralOwnerOffset));
+    const uint32_t owner_off = vt == module_va(adapter::kCAIVolunteerGeneralVtableRva)
+        ? adapter::kCAIVolunteerGeneralOwnerOffset
+        : adapter::kCAIGeneralOwnerOffset;
+    return country_from_owner(
+        *reinterpret_cast<const uint64_t*>(static_cast<const uint8_t*>(general) + owner_off));
 }
 
 bool should_skip_major_general(void* general) {
@@ -1440,6 +1768,354 @@ uint64_t HOIV_MSABI hoiv_hook_ag_factory(void* front, void* a, void* b, void* c)
         return 0;
     }
     return g_orig_ag_factory(front, a, b, c);
+}
+
+uint64_t probe_object_vtable(uint64_t object) {
+    if (!user_object(object) || !page_readable(object, 8)) {
+        return 0;
+    }
+    return *reinterpret_cast<const uint64_t*>(object);
+}
+
+uint32_t probe_vt_rva(uint64_t object) {
+    const uint64_t vt = probe_object_vtable(object);
+    if (vt == 0 || g_module_base == nullptr) {
+        return 0;
+    }
+    const uint64_t begin = module_va(0);
+    if (vt < begin || vt >= begin + g_module_size) {
+        return 0;
+    }
+    return static_cast<uint32_t>(vt - begin);
+}
+
+void note_probe_vt(std::atomic<uint32_t>* slot, uint64_t object) {
+    if (slot == nullptr || slot->load(std::memory_order_relaxed) != 0) {
+        return;
+    }
+    const uint32_t rva = probe_vt_rva(object);
+    if (rva != 0) {
+        slot->store(rva, std::memory_order_relaxed);
+    }
+}
+
+int32_t probe_tag_from_country(uint64_t country) {
+    if (!user_object(country) ||
+        !page_readable(country + adapter::kCountryTagOffset, 4) ||
+        *reinterpret_cast<const uint64_t*>(country) != module_va(adapter::kCCountryVtableRva)) {
+        return 0;
+    }
+    return *reinterpret_cast<const int32_t*>(country + adapter::kCountryTagOffset);
+}
+
+int32_t probe_tag_from_object(uint64_t object) {
+    const uint64_t vt = probe_object_vtable(object);
+    if (vt == 0) {
+        return 0;
+    }
+    if (vt == module_va(adapter::kCCountryVtableRva)) {
+        return probe_tag_from_country(object);
+    }
+    if (adapter::is_country_ai_vtable(vt, module_va(0))) {
+        if (!page_readable(object + adapter::kCountryAiCountryOffset, 8)) {
+            return 0;
+        }
+        return probe_tag_from_country(
+            *reinterpret_cast<const uint64_t*>(object + adapter::kCountryAiCountryOffset));
+    }
+    if (adapter::is_military_minister_vtable(vt, module_va(0))) {
+        if (!page_readable(object + adapter::kCAIMilitaryMinisterOwnerOffset, 8)) {
+            return 0;
+        }
+        return probe_tag_from_object(
+            *reinterpret_cast<const uint64_t*>(
+                object + adapter::kCAIMilitaryMinisterOwnerOffset));
+    }
+    if (adapter::is_land_general_vtable(vt, module_va(0))) {
+        const uint32_t owner_off = vt == module_va(adapter::kCAIVolunteerGeneralVtableRva)
+            ? adapter::kCAIVolunteerGeneralOwnerOffset
+            : adapter::kCAIGeneralOwnerOffset;
+        if (!page_readable(object + owner_off, 8)) {
+            return 0;
+        }
+        return probe_tag_from_object(*reinterpret_cast<const uint64_t*>(object + owner_off));
+    }
+    if (vt == module_va(adapter::kCFrontVtableRva)) {
+        if (!page_readable(object + adapter::kFrontOwnerOffset, 8)) {
+            return 0;
+        }
+        return probe_tag_from_object(
+            *reinterpret_cast<const uint64_t*>(object + adapter::kFrontOwnerOffset));
+    }
+    return 0;
+}
+
+void note_probe_tag(std::atomic<int32_t>* slot, int32_t tag) {
+    if (slot == nullptr || tag == 0) {
+        return;
+    }
+    const int32_t current = slot->load(std::memory_order_relaxed);
+    if (current == 0 || tag == adapter::kGermanyTestCountryTag) {
+        slot->store(tag, std::memory_order_relaxed);
+    }
+}
+
+int32_t probe_tag_from_move_list(uint64_t list) {
+    if (!user_object(list) || !page_readable(list + adapter::kLandActorMoveOwnerOffset, 8)) {
+        return 0;
+    }
+    const uint64_t owner = *reinterpret_cast<const uint64_t*>(list + adapter::kLandActorMoveOwnerOffset);
+    note_probe_vt(&g_probe_move_vt, owner);
+    return probe_tag_from_object(owner);
+}
+
+uint64_t HOIV_MSABI hoiv_hook_probe_move(void* a, void* b, void* c, void* d) {
+    g_probe_move_enters.fetch_add(1, std::memory_order_relaxed);
+    const uint64_t list = reinterpret_cast<uint64_t>(a);
+    const int32_t tag = probe_tag_from_move_list(list);
+    note_probe_tag(&g_probe_move_tag, tag);
+    if (tag == adapter::kGermanyTestCountryTag) {
+        g_probe_move_skips.fetch_add(1, std::memory_order_relaxed);
+        return 0;
+    }
+    if (g_orig_probe_move == nullptr) {
+        return 0;
+    }
+    return g_orig_probe_move(a, b, c, d);
+}
+
+uint64_t HOIV_MSABI hoiv_hook_probe_mass(void* a, void* b, void* c, void* d) {
+    g_probe_mass_enters.fetch_add(1, std::memory_order_relaxed);
+    const uint64_t self = reinterpret_cast<uint64_t>(a);
+    note_probe_vt(&g_probe_mass_vt, self);
+    const int32_t tag = probe_tag_from_object(self);
+    note_probe_tag(&g_probe_mass_tag, tag);
+    const bool german_ai =
+        tag == adapter::kGermanyTestCountryTag &&
+        adapter::is_country_ai_vtable(probe_object_vtable(self), reinterpret_cast<uint64_t>(g_module_base));
+    if (german_ai) {
+        g_skip_german_mass_move = true;
+    }
+    uint64_t result = 0;
+    if (g_orig_probe_mass != nullptr) {
+        result = g_orig_probe_mass(a, b, c, d);
+    }
+    if (german_ai) {
+        g_skip_german_mass_move = false;
+    }
+    return result;
+}
+
+uint64_t HOIV_MSABI hoiv_hook_probe_exec(void* a, void* b, void* c, void* d) {
+    g_probe_exec_enters.fetch_add(1, std::memory_order_relaxed);
+    note_probe_tag(&g_probe_exec_tag, probe_tag_from_object(reinterpret_cast<uint64_t>(a)));
+    note_probe_tag(&g_probe_exec_tag, probe_tag_from_object(reinterpret_cast<uint64_t>(b)));
+    note_probe_tag(&g_probe_exec_tag, probe_tag_from_object(reinterpret_cast<uint64_t>(c)));
+    note_probe_vt(&g_probe_exec_vt0, reinterpret_cast<uint64_t>(a));
+    note_probe_vt(&g_probe_exec_vt1, reinterpret_cast<uint64_t>(b));
+    note_probe_vt(&g_probe_exec_vt2, reinterpret_cast<uint64_t>(c));
+    (void)d;
+    if (g_orig_probe_exec == nullptr) {
+        return 0;
+    }
+    return g_orig_probe_exec(a, b, c, d);
+}
+
+void HOIV_MSABI hoiv_hook_volunteer_tick(void* general) {
+    g_probe_vol_enters.fetch_add(1, std::memory_order_relaxed);
+    note_probe_vt(&g_probe_vol_vt, reinterpret_cast<uint64_t>(general));
+    const uint64_t country = country_from_general(general);
+    int32_t tag = 0;
+    if (country != 0 && page_readable(country + adapter::kCountryTagOffset, 4)) {
+        tag = *reinterpret_cast<const int32_t*>(country + adapter::kCountryTagOffset);
+    }
+    note_probe_tag(&g_probe_vol_tag, tag);
+    const uint64_t vt = probe_object_vtable(reinterpret_cast<uint64_t>(general));
+    if (tag == adapter::kGermanyTestCountryTag &&
+        vt == module_va(adapter::kCAIVolunteerGeneralVtableRva)) {
+        g_probe_vol_skips.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+    if (g_orig_probe_vol != nullptr) {
+        g_orig_probe_vol(general);
+    }
+}
+
+uint64_t HOIV_MSABI hoiv_hook_org_helper(void* a, void* b, void* c, void* d) {
+    if (g_orig_probe_org == nullptr) {
+        return 0;
+    }
+    return g_orig_probe_org(a, b, c, d);
+}
+
+int32_t probe_tag_from_args(void* a, void* b, void* c) {
+    int32_t tag = probe_tag_from_object(reinterpret_cast<uint64_t>(a));
+    if (tag == 0) {
+        tag = probe_tag_from_object(reinterpret_cast<uint64_t>(b));
+    }
+    if (tag == 0 && c != nullptr) {
+        tag = probe_tag_from_object(reinterpret_cast<uint64_t>(c));
+    }
+    if (tag == 0) {
+        const uint64_t country = country_from_general(a);
+        if (country != 0 && page_readable(country + adapter::kCountryTagOffset, 4)) {
+            tag = *reinterpret_cast<const int32_t*>(country + adapter::kCountryTagOffset);
+        }
+    }
+    return tag;
+}
+
+uint64_t HOIV_MSABI hoiv_hook_general_org(void* a, void* b, void* c, void* d) {
+    const int32_t tag = probe_tag_from_args(a, b, c);
+    const bool prev_skip = g_skip_german_org_create;
+    const int32_t prev_tag = g_org_create_tag;
+    if (tag != 0) {
+        g_org_create_tag = tag;
+    }
+    if (!g_allow_our_org && tag == adapter::kGermanyTestCountryTag) {
+        g_skip_german_org_create = true;
+    }
+    uint64_t result = 0;
+    if (g_orig_general_org != nullptr) {
+        result = g_orig_general_org(a, b, c, d);
+    }
+    g_skip_german_org_create = prev_skip;
+    g_org_create_tag = prev_tag;
+    return result;
+}
+
+uint64_t HOIV_MSABI hoiv_hook_area_defense_ai(void* a, void* b, void* c, void* d) {
+    note_probe_vt(&g_probe_exec_vt0, reinterpret_cast<uint64_t>(a));
+    const int32_t tag = probe_tag_from_args(a, b, c);
+    note_probe_tag(&g_probe_exec_tag, tag);
+    if (!g_allow_our_org && tag == adapter::kGermanyTestCountryTag) {
+        g_probe_exec_skips.fetch_add(1, std::memory_order_relaxed);
+        return 0;
+    }
+    if (g_orig_area_def_ai == nullptr) {
+        return 0;
+    }
+    return g_orig_area_def_ai(a, b, c, d);
+}
+
+bool skip_german_ag_or_army_poster(void* a, void* b, void* c) {
+    g_probe_ag_enters.fetch_add(1, std::memory_order_relaxed);
+    note_probe_vt(&g_probe_ag_vt, reinterpret_cast<uint64_t>(a));
+    int32_t tag = probe_tag_from_args(a, b, c);
+    if (tag == 0) {
+        tag = g_org_create_tag;
+    }
+    note_probe_tag(&g_probe_ag_tag, tag);
+    if (!g_allow_our_org &&
+        (g_skip_german_org_create || tag == adapter::kGermanyTestCountryTag)) {
+        g_probe_ag_skips.fetch_add(1, std::memory_order_relaxed);
+        return true;
+    }
+    return false;
+}
+
+uint64_t HOIV_MSABI call_org_poster(LandActorProbeFn original, void* a, void* b, void* c, void* d) {
+    if (skip_german_ag_or_army_poster(a, b, c)) {
+        return 0;
+    }
+    if (original == nullptr) {
+        return 0;
+    }
+    return original(a, b, c, d);
+}
+
+uint64_t HOIV_MSABI hoiv_hook_army_group_ai(void* a, void* b, void* c, void* d) {
+    return call_org_poster(g_orig_ag_ai, a, b, c, d);
+}
+
+uint64_t HOIV_MSABI hoiv_hook_army_ai(void* a, void* b, void* c, void* d) {
+    return call_org_poster(g_orig_army_ai, a, b, c, d);
+}
+
+uint64_t HOIV_MSABI hoiv_hook_army_ai2(void* a, void* b, void* c, void* d) {
+    return call_org_poster(g_orig_army_ai2, a, b, c, d);
+}
+
+uint64_t HOIV_MSABI hoiv_hook_theatre_ai_create(void* a, void* b, void* c, void* d) {
+    g_probe_org_enters.fetch_add(1, std::memory_order_relaxed);
+    note_probe_vt(&g_probe_org_vt, reinterpret_cast<uint64_t>(a));
+    int32_t tag = probe_tag_from_object(reinterpret_cast<uint64_t>(a));
+    if (tag == 0) {
+        tag = probe_tag_from_object(reinterpret_cast<uint64_t>(b));
+    }
+    if (tag == 0 && user_object(reinterpret_cast<uint64_t>(a)) &&
+        page_readable(reinterpret_cast<uint64_t>(a) + adapter::kCountryTagOffset, 8)) {
+        tag = probe_tag_from_object(
+            *reinterpret_cast<const uint64_t*>(
+                reinterpret_cast<uint64_t>(a) + adapter::kCountryAiCountryOffset));
+    }
+    note_probe_tag(&g_probe_org_tag, tag);
+    const int32_t prev_tag = g_org_create_tag;
+    if (tag != 0) {
+        g_org_create_tag = tag;
+    }
+    uint64_t result = 0;
+    if (g_orig_theatre_ai != nullptr) {
+        result = g_orig_theatre_ai(a, b, c, d);
+    }
+    g_org_create_tag = prev_tag;
+    return result;
+}
+
+uint64_t HOIV_MSABI hoiv_hook_theatre_create_gate(void* a, void* b, void* c, void* d) {
+    if (g_orig_theatre_gate == nullptr) {
+        return 0;
+    }
+    return g_orig_theatre_gate(a, b, c, d);
+}
+
+uint64_t HOIV_MSABI hoiv_hook_theatre_ctor(void* self, void* b, void* c, void* d) {
+    if (g_orig_theatre_ctor == nullptr) {
+        return 0;
+    }
+    return g_orig_theatre_ctor(self, b, c, d);
+}
+
+uint8_t HOIV_MSABI hoiv_hook_org_command_can(OrgCommandCanFn original, void* cmd) {
+    if (g_skip_german_org_create && !g_allow_our_org) {
+        g_probe_org_skips.fetch_add(1, std::memory_order_relaxed);
+        return 0;
+    }
+    if (original == nullptr) {
+        return 0;
+    }
+    return original(cmd);
+}
+
+uint8_t HOIV_MSABI hoiv_hook_theatre_can(void* cmd) {
+    return hoiv_hook_org_command_can(g_orig_theatre_can, cmd);
+}
+
+uint8_t HOIV_MSABI hoiv_hook_ag_can(void* cmd) {
+    return hoiv_hook_org_command_can(g_orig_ag_can, cmd);
+}
+
+uint8_t HOIV_MSABI hoiv_hook_assign_ag_can(void* cmd) {
+    return hoiv_hook_org_command_can(g_orig_assign_ag_can, cmd);
+}
+
+uint8_t HOIV_MSABI hoiv_hook_front_can(void* cmd) {
+    return hoiv_hook_org_command_can(g_orig_front_can, cmd);
+}
+
+uint8_t HOIV_MSABI hoiv_hook_order_group_can(void* cmd) {
+    return hoiv_hook_org_command_can(g_orig_order_group_can, cmd);
+}
+
+uint8_t HOIV_MSABI hoiv_hook_mass_move_can(void* cmd) {
+    if (g_skip_german_mass_move) {
+        g_probe_mass_skips.fetch_add(1, std::memory_order_relaxed);
+        return 0;
+    }
+    if (g_orig_mass_move_can == nullptr) {
+        return 0;
+    }
+    return g_orig_mass_move_can(cmd);
 }
 
 void HOIV_MSABI hoiv_hook_mil_create(void* mil) {
@@ -1873,6 +2549,400 @@ bool patch_org_create() {
     return true;
 }
 
+void reset_land_actor_probes() {
+    g_probe_move_enters.store(0, std::memory_order_relaxed);
+    g_probe_mass_enters.store(0, std::memory_order_relaxed);
+    g_probe_exec_enters.store(0, std::memory_order_relaxed);
+    g_probe_exec_tag.store(0, std::memory_order_relaxed);
+    g_probe_exec_vt0.store(0, std::memory_order_relaxed);
+    g_probe_exec_vt1.store(0, std::memory_order_relaxed);
+    g_probe_exec_vt2.store(0, std::memory_order_relaxed);
+    g_probe_mass_vt.store(0, std::memory_order_relaxed);
+    g_probe_mass_tag.store(0, std::memory_order_relaxed);
+    g_probe_move_vt.store(0, std::memory_order_relaxed);
+    g_probe_move_tag.store(0, std::memory_order_relaxed);
+    g_probe_mass_skips.store(0, std::memory_order_relaxed);
+    g_probe_move_skips.store(0, std::memory_order_relaxed);
+    g_probe_vol_enters.store(0, std::memory_order_relaxed);
+    g_probe_vol_vt.store(0, std::memory_order_relaxed);
+    g_probe_vol_tag.store(0, std::memory_order_relaxed);
+    g_probe_vol_skips.store(0, std::memory_order_relaxed);
+    g_probe_org_enters.store(0, std::memory_order_relaxed);
+    g_probe_org_vt.store(0, std::memory_order_relaxed);
+    g_probe_org_tag.store(0, std::memory_order_relaxed);
+    g_probe_org_skips.store(0, std::memory_order_relaxed);
+    g_probe_exec_skips.store(0, std::memory_order_relaxed);
+    g_probe_ag_enters.store(0, std::memory_order_relaxed);
+    g_probe_ag_vt.store(0, std::memory_order_relaxed);
+    g_probe_ag_tag.store(0, std::memory_order_relaxed);
+    g_probe_ag_skips.store(0, std::memory_order_relaxed);
+    if (g_block != nullptr) {
+        g_block->land_actor_move_enters = 0;
+        g_block->land_actor_mass_enters = 0;
+        g_block->land_actor_exec_enters = 0;
+        g_block->land_actor_exec_tag = 0;
+        g_block->land_actor_exec_vt0 = 0;
+        g_block->land_actor_exec_vt1 = 0;
+        g_block->land_actor_exec_vt2 = 0;
+        g_block->land_actor_mass_vt = 0;
+        g_block->land_actor_mass_tag = 0;
+        g_block->land_actor_move_vt = 0;
+        g_block->land_actor_move_tag = 0;
+        g_block->land_actor_mass_skips = 0;
+        g_block->land_actor_move_skips = 0;
+        g_block->land_actor_vol_enters = 0;
+        g_block->land_actor_vol_vt = 0;
+        g_block->land_actor_vol_tag = 0;
+        g_block->land_actor_vol_skips = 0;
+        g_block->land_actor_org_enters = 0;
+        g_block->land_actor_org_vt = 0;
+        g_block->land_actor_org_tag = 0;
+        g_block->land_actor_org_skips = 0;
+        g_block->land_actor_exec_skips = 0;
+        g_block->land_actor_ag_enters = 0;
+        g_block->land_actor_ag_vt = 0;
+        g_block->land_actor_ag_tag = 0;
+        g_block->land_actor_ag_skips = 0;
+    }
+}
+
+bool patch_land_actor_probes() {
+    if (g_probe_patched.load()) {
+        return true;
+    }
+    if (g_module_base == nullptr) {
+        return false;
+    }
+    bool any = false;
+    if (adapter::land_actor_move_bytes_match(g_module_base + adapter::kLandActorMoveRva) &&
+        install_stolen_hook(
+            adapter::kLandActorMoveRva,
+            adapter::kLandActorMoveHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_probe_move),
+            g_saved_probe_move,
+            &g_probe_move_tramp)) {
+        g_orig_probe_move = reinterpret_cast<LandActorProbeFn>(g_probe_move_tramp);
+        any = true;
+    }
+    if (adapter::land_actor_mass_bytes_match(g_module_base + adapter::kLandActorMassRva) &&
+        install_stolen_hook(
+            adapter::kLandActorMassRva,
+            adapter::kLandActorMassHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_probe_mass),
+            g_saved_probe_mass,
+            &g_probe_mass_tramp)) {
+        g_orig_probe_mass = reinterpret_cast<LandActorProbeFn>(g_probe_mass_tramp);
+        any = true;
+    }
+    if (adapter::land_actor_exec_bytes_match(g_module_base + adapter::kLandActorExecRva) &&
+        install_stolen_hook(
+            adapter::kLandActorExecRva,
+            adapter::kLandActorExecHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_probe_exec),
+            g_saved_probe_exec,
+            &g_probe_exec_tramp)) {
+        g_orig_probe_exec = reinterpret_cast<LandActorProbeFn>(g_probe_exec_tramp);
+        any = true;
+    }
+    if (adapter::volunteer_tick_bytes_match(g_module_base + adapter::kCAIVolunteerGeneralTickRva) &&
+        install_stolen_hook(
+            adapter::kCAIVolunteerGeneralTickRva,
+            adapter::kCAIVolunteerGeneralTickHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_volunteer_tick),
+            g_saved_probe_vol,
+            &g_probe_vol_tramp)) {
+        g_orig_probe_vol = reinterpret_cast<GeneralTickFn>(g_probe_vol_tramp);
+        any = true;
+    }
+    if (adapter::land_org_helper_bytes_match(g_module_base + adapter::kLandOrgHelperRva) &&
+        install_stolen_hook(
+            adapter::kLandOrgHelperRva,
+            adapter::kLandOrgHelperHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_org_helper),
+            g_saved_probe_org,
+            &g_probe_org_tramp)) {
+        g_orig_probe_org = reinterpret_cast<LandActorProbeFn>(g_probe_org_tramp);
+        any = true;
+    }
+    if (adapter::general_org_bytes_match(g_module_base + adapter::kCAIGeneralOrgRva) &&
+        install_stolen_hook(
+            adapter::kCAIGeneralOrgRva,
+            adapter::kCAIGeneralOrgHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_general_org),
+            g_saved_general_org,
+            &g_general_org_tramp)) {
+        g_orig_general_org = reinterpret_cast<LandActorProbeFn>(g_general_org_tramp);
+        any = true;
+    }
+    if (adapter::mass_move_can_bytes_match(g_module_base + adapter::kCMassMoveCommandCanRva) &&
+        install_stolen_hook(
+            adapter::kCMassMoveCommandCanRva,
+            adapter::kCMassMoveCommandCanHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_mass_move_can),
+            g_saved_mass_move_can,
+            &g_mass_move_can_tramp)) {
+        g_orig_mass_move_can = reinterpret_cast<MassMoveCanFn>(g_mass_move_can_tramp);
+        any = true;
+    }
+    if (adapter::set_theatre_can_bytes_match(g_module_base + adapter::kCSetTheatreCommandCanRva) &&
+        install_stolen_hook(
+            adapter::kCSetTheatreCommandCanRva,
+            adapter::kCSetTheatreCommandCanHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_theatre_can),
+            g_saved_theatre_can,
+            &g_theatre_can_tramp)) {
+        g_orig_theatre_can = reinterpret_cast<OrgCommandCanFn>(g_theatre_can_tramp);
+        any = true;
+    }
+    if (adapter::army_group_can_bytes_match(g_module_base + adapter::kCArmyGroupCommandCanRva) &&
+        install_stolen_hook(
+            adapter::kCArmyGroupCommandCanRva,
+            adapter::kCArmyGroupCommandCanHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_ag_can),
+            g_saved_ag_can,
+            &g_ag_can_tramp)) {
+        g_orig_ag_can = reinterpret_cast<OrgCommandCanFn>(g_ag_can_tramp);
+        any = true;
+    }
+    if (adapter::assign_army_group_can_bytes_match(
+            g_module_base + adapter::kCAssignToArmyGroupCommandCanRva) &&
+        install_stolen_hook(
+            adapter::kCAssignToArmyGroupCommandCanRva,
+            adapter::kCAssignToArmyGroupCommandCanHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_assign_ag_can),
+            g_saved_assign_ag_can,
+            &g_assign_ag_can_tramp)) {
+            g_orig_assign_ag_can = reinterpret_cast<OrgCommandCanFn>(g_assign_ag_can_tramp);
+        any = true;
+    }
+    if (adapter::new_front_can_bytes_match(
+            g_module_base + adapter::kCOrderNewFrontCommandCanRva) &&
+        install_stolen_hook(
+            adapter::kCOrderNewFrontCommandCanRva,
+            adapter::kCOrderNewFrontCommandCanHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_front_can),
+            g_saved_front_can,
+            &g_front_can_tramp)) {
+        g_orig_front_can = reinterpret_cast<OrgCommandCanFn>(g_front_can_tramp);
+        any = true;
+    }
+    if (adapter::order_group_can_bytes_match(
+            g_module_base + adapter::kCOrderGroupCommandCanRva) &&
+        install_stolen_hook(
+            adapter::kCOrderGroupCommandCanRva,
+            adapter::kCOrderGroupCommandCanHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_order_group_can),
+            g_saved_order_group_can,
+            &g_order_group_can_tramp)) {
+        g_orig_order_group_can = reinterpret_cast<OrgCommandCanFn>(g_order_group_can_tramp);
+        any = true;
+    }
+    if (adapter::theatre_ai_create_bytes_match(g_module_base + adapter::kTheatreAiCreateRva) &&
+        install_stolen_hook(
+            adapter::kTheatreAiCreateRva,
+            adapter::kTheatreAiCreateHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_theatre_ai_create),
+            g_saved_theatre_ai,
+            &g_theatre_ai_tramp)) {
+        g_orig_theatre_ai = reinterpret_cast<LandActorProbeFn>(g_theatre_ai_tramp);
+        any = true;
+    }
+    if (adapter::theatre_create_gate_bytes_match(g_module_base + adapter::kTheatreCreateGateRva) &&
+        install_stolen_hook(
+            adapter::kTheatreCreateGateRva,
+            adapter::kTheatreCreateGateHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_theatre_create_gate),
+            g_saved_theatre_gate,
+            &g_theatre_gate_tramp)) {
+        g_orig_theatre_gate = reinterpret_cast<LandActorProbeFn>(g_theatre_gate_tramp);
+        any = true;
+    }
+    if (adapter::theatre_ctor_bytes_match(g_module_base + adapter::kCTheatreCtorRva) &&
+        install_stolen_hook(
+            adapter::kCTheatreCtorRva,
+            adapter::kCTheatreCtorHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_theatre_ctor),
+            g_saved_theatre_ctor,
+            &g_theatre_ctor_tramp)) {
+        g_orig_theatre_ctor = reinterpret_cast<LandActorProbeFn>(g_theatre_ctor_tramp);
+        any = true;
+    }
+    if (adapter::area_defense_ai_bytes_match(g_module_base + adapter::kAreaDefenseAiRva) &&
+        install_stolen_hook(
+            adapter::kAreaDefenseAiRva,
+            adapter::kAreaDefenseAiHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_area_defense_ai),
+            g_saved_area_def_ai,
+            &g_area_def_ai_tramp)) {
+        g_orig_area_def_ai = reinterpret_cast<LandActorProbeFn>(g_area_def_ai_tramp);
+        any = true;
+    }
+    if (adapter::army_group_ai_bytes_match(g_module_base + adapter::kArmyGroupAiRva) &&
+        install_stolen_hook(
+            adapter::kArmyGroupAiRva,
+            adapter::kArmyGroupAiHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_army_group_ai),
+            g_saved_ag_ai,
+            &g_ag_ai_tramp)) {
+        g_orig_ag_ai = reinterpret_cast<LandActorProbeFn>(g_ag_ai_tramp);
+        any = true;
+    }
+    if (adapter::army_ai_bytes_match(g_module_base + adapter::kArmyAiRva) &&
+        install_stolen_hook(
+            adapter::kArmyAiRva,
+            adapter::kArmyAiHookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_army_ai),
+            g_saved_army_ai,
+            &g_army_ai_tramp)) {
+        g_orig_army_ai = reinterpret_cast<LandActorProbeFn>(g_army_ai_tramp);
+        any = true;
+    }
+    if (adapter::army_ai2_bytes_match(g_module_base + adapter::kArmyAi2Rva) &&
+        install_stolen_hook(
+            adapter::kArmyAi2Rva,
+            adapter::kArmyAi2HookBytes,
+            reinterpret_cast<void*>(&hoiv_hook_army_ai2),
+            g_saved_army_ai2,
+            &g_army_ai2_tramp)) {
+        g_orig_army_ai2 = reinterpret_cast<LandActorProbeFn>(g_army_ai2_tramp);
+        any = true;
+    }
+    g_probe_patched.store(any);
+    return any;
+}
+
+void restore_land_actor_probes() {
+    if (!g_probe_patched.load() && g_probe_move_tramp == nullptr && g_probe_mass_tramp == nullptr &&
+        g_probe_exec_tramp == nullptr && g_probe_vol_tramp == nullptr &&
+        g_probe_org_tramp == nullptr && g_general_org_tramp == nullptr &&
+        g_mass_move_can_tramp == nullptr && g_theatre_can_tramp == nullptr &&
+        g_ag_can_tramp == nullptr && g_assign_ag_can_tramp == nullptr &&
+        g_front_can_tramp == nullptr && g_order_group_can_tramp == nullptr &&
+        g_theatre_ai_tramp == nullptr && g_theatre_gate_tramp == nullptr &&
+        g_theatre_ctor_tramp == nullptr &&
+        g_area_def_ai_tramp == nullptr && g_ag_ai_tramp == nullptr &&
+        g_army_ai_tramp == nullptr && g_army_ai2_tramp == nullptr) {
+        reset_land_actor_probes();
+        return;
+    }
+    remove_stolen_hook(
+        adapter::kArmyAi2Rva,
+        adapter::kArmyAi2HookBytes,
+        g_saved_army_ai2,
+        &g_army_ai2_tramp);
+    remove_stolen_hook(
+        adapter::kArmyAiRva,
+        adapter::kArmyAiHookBytes,
+        g_saved_army_ai,
+        &g_army_ai_tramp);
+    remove_stolen_hook(
+        adapter::kArmyGroupAiRva,
+        adapter::kArmyGroupAiHookBytes,
+        g_saved_ag_ai,
+        &g_ag_ai_tramp);
+    remove_stolen_hook(
+        adapter::kAreaDefenseAiRva,
+        adapter::kAreaDefenseAiHookBytes,
+        g_saved_area_def_ai,
+        &g_area_def_ai_tramp);
+    remove_stolen_hook(
+        adapter::kCTheatreCtorRva,
+        adapter::kCTheatreCtorHookBytes,
+        g_saved_theatre_ctor,
+        &g_theatre_ctor_tramp);
+    remove_stolen_hook(
+        adapter::kTheatreCreateGateRva,
+        adapter::kTheatreCreateGateHookBytes,
+        g_saved_theatre_gate,
+        &g_theatre_gate_tramp);
+    remove_stolen_hook(
+        adapter::kTheatreAiCreateRva,
+        adapter::kTheatreAiCreateHookBytes,
+        g_saved_theatre_ai,
+        &g_theatre_ai_tramp);
+    remove_stolen_hook(
+        adapter::kCOrderGroupCommandCanRva,
+        adapter::kCOrderGroupCommandCanHookBytes,
+        g_saved_order_group_can,
+        &g_order_group_can_tramp);
+    remove_stolen_hook(
+        adapter::kCOrderNewFrontCommandCanRva,
+        adapter::kCOrderNewFrontCommandCanHookBytes,
+        g_saved_front_can,
+        &g_front_can_tramp);
+    remove_stolen_hook(
+        adapter::kCAssignToArmyGroupCommandCanRva,
+        adapter::kCAssignToArmyGroupCommandCanHookBytes,
+        g_saved_assign_ag_can,
+        &g_assign_ag_can_tramp);
+    remove_stolen_hook(
+        adapter::kCArmyGroupCommandCanRva,
+        adapter::kCArmyGroupCommandCanHookBytes,
+        g_saved_ag_can,
+        &g_ag_can_tramp);
+    remove_stolen_hook(
+        adapter::kCSetTheatreCommandCanRva,
+        adapter::kCSetTheatreCommandCanHookBytes,
+        g_saved_theatre_can,
+        &g_theatre_can_tramp);
+    remove_stolen_hook(
+        adapter::kCAIGeneralOrgRva,
+        adapter::kCAIGeneralOrgHookBytes,
+        g_saved_general_org,
+        &g_general_org_tramp);
+    remove_stolen_hook(
+        adapter::kLandOrgHelperRva,
+        adapter::kLandOrgHelperHookBytes,
+        g_saved_probe_org,
+        &g_probe_org_tramp);
+    remove_stolen_hook(
+        adapter::kCMassMoveCommandCanRva,
+        adapter::kCMassMoveCommandCanHookBytes,
+        g_saved_mass_move_can,
+        &g_mass_move_can_tramp);
+    remove_stolen_hook(
+        adapter::kCAIVolunteerGeneralTickRva,
+        adapter::kCAIVolunteerGeneralTickHookBytes,
+        g_saved_probe_vol,
+        &g_probe_vol_tramp);
+    remove_stolen_hook(
+        adapter::kLandActorExecRva,
+        adapter::kLandActorExecHookBytes,
+        g_saved_probe_exec,
+        &g_probe_exec_tramp);
+    remove_stolen_hook(
+        adapter::kLandActorMassRva,
+        adapter::kLandActorMassHookBytes,
+        g_saved_probe_mass,
+        &g_probe_mass_tramp);
+    remove_stolen_hook(
+        adapter::kLandActorMoveRva,
+        adapter::kLandActorMoveHookBytes,
+        g_saved_probe_move,
+        &g_probe_move_tramp);
+    g_orig_probe_move = nullptr;
+    g_orig_probe_mass = nullptr;
+    g_orig_probe_exec = nullptr;
+    g_orig_probe_vol = nullptr;
+    g_orig_probe_org = nullptr;
+    g_orig_general_org = nullptr;
+    g_orig_mass_move_can = nullptr;
+    g_orig_theatre_can = nullptr;
+    g_orig_ag_can = nullptr;
+    g_orig_assign_ag_can = nullptr;
+    g_orig_front_can = nullptr;
+    g_orig_order_group_can = nullptr;
+    g_orig_theatre_ai = nullptr;
+    g_orig_theatre_gate = nullptr;
+    g_orig_theatre_ctor = nullptr;
+    g_orig_area_def_ai = nullptr;
+    g_orig_ag_ai = nullptr;
+    g_orig_army_ai = nullptr;
+    g_orig_army_ai2 = nullptr;
+    g_probe_patched.store(false);
+    reset_land_actor_probes();
+}
+
 void restore_org_create() {
     if (!g_org_patched.load()) {
         return;
@@ -1995,6 +3065,8 @@ bool game_reader_install() {
         restore_get_player();
         return false;
     }
+    reset_land_actor_probes();
+    patch_land_actor_probes();
     g_last_capture_ms.store(0);
     g_armed.store(true);
     return true;
@@ -2010,6 +3082,7 @@ void game_reader_uninstall() {
     g_restored_global_ai.store(false);
     g_last_handle_snapshot_ms = 0;
     std::memset(g_major_handle_hash, 0, sizeof(g_major_handle_hash));
+    restore_land_actor_probes();
     restore_org_create();
     restore_general_tick();
     restore_move_gate();

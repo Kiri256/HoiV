@@ -8,6 +8,7 @@ namespace hoiv {
 struct RuntimeConfig {
     uint8_t enabled = 0;
     uint8_t read_only = 1;
+    uint8_t skip_theatre_ai = 0;
     uint32_t max_orders_per_hour = 0;
     std::wstring exe_path;
     std::string expected_sha256_hex;

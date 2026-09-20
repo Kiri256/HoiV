@@ -20,6 +20,7 @@ inline constexpr uint32_t kCCurrentGameStateVtableRva = 0x026fb148;
 inline constexpr uint32_t kCGameStateVtableRva = 0x026fb0d0;
 inline constexpr uint32_t kCCountryVtableRva = 0x027c0e80;
 inline constexpr uint32_t kCCountryAIVtableRva = 0x02710c90;
+inline constexpr uint32_t kCCountryAIVtableAltRva = 0x02710d20;
 inline constexpr uint32_t kCArmyVtableRva = 0x02933d20;
 inline constexpr uint32_t kCUnitVtableRva = 0x0292cce8;
 inline constexpr uint32_t kCProvinceVtableRva = 0x0294ae78;
@@ -199,6 +200,7 @@ inline constexpr uint32_t kCountryAiObjectSize = 0x0C28;
 // Country+0x223D is checked by military AND foreign/interior. Not land-only.
 inline constexpr uint32_t kCountryAiMilitaryMinisterOffset = 0x0BC8;
 inline constexpr uint32_t kCAIMilitaryMinisterVtableRva = 0x02962938;
+inline constexpr uint32_t kCAIMilitaryMinisterOwnerOffset = 0x0008;
 inline constexpr uint32_t kMilitaryMinisterObjectSize = 0x07A0;
 inline constexpr uint32_t kMilitaryMinisterGeneralsOffset = 0x0098;
 inline constexpr uint32_t kCAIGeneralVtableRva = 0x029613d0;
@@ -252,7 +254,9 @@ inline constexpr uint32_t kMilitaryMinisterCreateHookBytes = 16;
 inline constexpr uint32_t kCOrdersGroupVtableRva = 0x0292bec0;
 inline constexpr uint32_t kCArmyGroupVtableRva = 0x0292bf58;
 inline constexpr uint32_t kCTheaterGroupVtableRva = 0x029be6c0;
+inline constexpr uint32_t kCTheatreVtableRva = 0x0294ed28;
 inline constexpr uint32_t kCFrontVtableRva = 0x0294ee20;
+inline constexpr uint32_t kUnitParentOffset = 0x02a0;
 inline constexpr uint32_t kOrdersGroupAiBlockOffset = 0x39;
 inline constexpr uint8_t kOrdersGroupAiBlockValue = 1;
 inline constexpr uint32_t kOrdersGroupCanAiRva = 0x00be8920;
@@ -295,5 +299,213 @@ inline constexpr uint8_t kGlobalAiToggleBytes[] = {
     0xC5, 0x28, 0x07, 0x03};
 inline constexpr uint32_t kGlobalAiToggleByteCount = 16;
 inline constexpr uint8_t kGlobalAiOnValue = 1;
+
+// Land-actor probes. Exec always calls original.
+// Mass body 0x002AB450 always runs: it also posts research and naval mass-move.
+// Germany land mass-move is skipped at CMassMoveCommand[9], not by skipping [145].
+// Move (0x01A31660) rcx is an army list (CPdxArray-shaped, not a vtable object).
+// The function itself calls GetCountry on [rcx+0x18]. Skip original only for Germany.
+// Steal 15: 16th byte is the first byte of `push r14`.
+// CCountryAI[145] 0x002A7DE0 is a 13-byte thunk then E8/E9 to 0x002AB450.
+// 0x00F3EAE0: COrderExecuteCommand from CInGameIdler[4]; do not skip the body.
+inline constexpr uint32_t kLandActorMoveRva = 0x01a31660;
+inline constexpr uint8_t kLandActorMoveBytes[] = {
+    0x48, 0x8B, 0xC4, 0x48, 0x89, 0x48, 0x08, 0x55, 0x53, 0x56, 0x57, 0x41, 0x54, 0x41,
+    0x55};
+inline constexpr uint32_t kLandActorMoveByteCount = 15;
+inline constexpr uint32_t kLandActorMoveHookBytes = 15;
+inline constexpr uint32_t kLandActorMoveOwnerOffset = 0x18;
+inline constexpr uint32_t kLandActorMassRva = 0x002ab450;
+inline constexpr uint8_t kLandActorMassBytes[] = {
+    0x48, 0x89, 0x5C, 0x24, 0x20, 0x48, 0x89, 0x4C, 0x24, 0x08, 0x55, 0x56, 0x57, 0x41,
+    0x54};
+inline constexpr uint32_t kLandActorMassByteCount = 15;
+inline constexpr uint32_t kLandActorMassHookBytes = 15;
+// CMassMoveCommand ctor 0x0134FDA0 has one caller: CCountryAI[145] body.
+// That body also constructs CSetResearchCommand and CNavalMissionMassMoveCommand.
+// Skip [9] for Germany only. Do not skip the [145] body.
+inline constexpr uint32_t kCMassMoveCommandVtableRva = 0x0298a488;
+inline constexpr uint32_t kCMassMoveCommandCanRva = 0x01359010;
+inline constexpr uint8_t kCMassMoveCommandCanBytes[] = {
+    0x8B, 0x41, 0x4C, 0x83, 0xF8, 0x01, 0x7C, 0x07, 0x3B, 0x41, 0x34, 0x0F, 0x94, 0xC0, 0xC3};
+inline constexpr uint32_t kCMassMoveCommandCanByteCount = 15;
+inline constexpr uint32_t kCMassMoveCommandCanHookBytes = 15;
+inline constexpr uint32_t kLandActorExecRva = 0x00f3eae0;
+inline constexpr uint8_t kLandActorExecBytes[] = {
+    0x48, 0x8B, 0xC4, 0x4C, 0x89, 0x48, 0x20, 0x4C, 0x89, 0x40, 0x18, 0x48, 0x89, 0x48,
+    0x08, 0x55};
+inline constexpr uint32_t kLandActorExecByteCount = 16;
+inline constexpr uint32_t kLandActorExecHookBytes = 16;
+
+// CAIVolunteerGeneral[14] 0x01A5D160. Same +0x08 owner and +0x10 early-out as
+// CAIGeneral. Body calls 0x01A5BF00, which constructs COrderExecuteCommand and
+// posts via 0x0029E7B0. Steal 16: next insn is `push r15`. Skip original only
+// for Germany. Do not intercept Idler[4] / 0x00F3EAE0.
+inline constexpr uint32_t kCAIVolunteerGeneralVtableRva = 0x02a0a7b0;
+inline constexpr uint32_t kCAIVolunteerGeneralOwnerOffset = 0x0008;
+inline constexpr uint32_t kCAIVolunteerGeneralTickRva = 0x01a5d160;
+inline constexpr uint8_t kCAIVolunteerGeneralTickBytes[] = {
+    0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x56, 0x57, 0x41, 0x54,
+    0x41, 0x56};
+inline constexpr uint32_t kCAIVolunteerGeneralTickByteCount = 16;
+inline constexpr uint32_t kCAIVolunteerGeneralTickHookBytes = 16;
+
+// Native land-org commands. Player and AI both go through these, then factories.
+// Not issued until ctor arguments are confirmed in-game. Closing factories is
+// not a substitute for issuing these.
+inline constexpr uint32_t kCSetTheatreCommandVtableRva = 0x0298a870;
+inline constexpr uint32_t kCSetTheatreCommandCanRva = 0x0135af40;
+inline constexpr uint8_t kCSetTheatreCommandCanBytes[] = {
+    0x48, 0x89, 0x5C, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x30, 0x48, 0x8B, 0xF9, 0x48,
+    0x8B, 0xDA};
+inline constexpr uint32_t kCSetTheatreCommandCanByteCount = 16;
+inline constexpr uint32_t kCSetTheatreCommandCanHookBytes = 16;
+inline constexpr uint32_t kCArmyGroupCommandVtableRva = 0x029e3500;
+inline constexpr uint32_t kCArmyGroupCommandDoRva = 0x01827540;
+inline constexpr uint32_t kCArmyGroupCommandCanRva = 0x01831b90;
+inline constexpr uint8_t kCArmyGroupCommandCanBytes[] = {
+    0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC,
+    0x20};
+inline constexpr uint32_t kCArmyGroupCommandCanByteCount = 15;
+inline constexpr uint32_t kCArmyGroupCommandCanHookBytes = 15;
+inline constexpr uint32_t kCOrderNewFrontCommandVtableRva = 0x029e4180;
+inline constexpr uint32_t kCOrderNewFrontCommandDoRva = 0x0182dbb0;
+inline constexpr uint32_t kCOrderNewFrontCommandCanRva = 0x01832da0;
+inline constexpr uint8_t kCOrderNewFrontCommandCanBytes[] = {
+    0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20, 0x83, 0x79, 0x5C, 0x00};
+inline constexpr uint32_t kCOrderNewFrontCommandCanByteCount = 14;
+inline constexpr uint32_t kCOrderNewFrontCommandCanHookBytes = 14;
+inline constexpr uint32_t kCAssignToArmyGroupCommandVtableRva = 0x029e35c8;
+inline constexpr uint32_t kCAssignToArmyGroupCommandCanRva = 0x01831d40;
+inline constexpr uint8_t kCAssignToArmyGroupCommandCanBytes[] = {
+    0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC,
+    0x20};
+inline constexpr uint32_t kCAssignToArmyGroupCommandCanByteCount = 15;
+inline constexpr uint32_t kCAssignToArmyGroupCommandCanHookBytes = 15;
+inline constexpr uint32_t kCOrderGroupCommandVtableRva = 0x029e3370;
+inline constexpr uint32_t kCOrderGroupCommandDoRva = 0x0182b0e0;
+inline constexpr uint32_t kCOrderGroupCommandCanRva = 0x01832910;
+inline constexpr uint8_t kCOrderGroupCommandCanBytes[] = {
+    0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x56, 0x57, 0x41, 0x54,
+    0x41, 0x56};
+inline constexpr uint32_t kCOrderGroupCommandCanByteCount = 16;
+inline constexpr uint32_t kCOrderGroupCommandCanHookBytes = 16;
+inline constexpr uint32_t kCOrderGroupCommandCtorBRva = 0x0181dd70;
+inline constexpr uint8_t kCOrderGroupCommandCtorBBytes[] = {
+    0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x4C, 0x24, 0x08, 0x55, 0x56, 0x57, 0x48,
+    0x83, 0xEC};
+inline constexpr uint32_t kCOrderGroupCommandCtorBByteCount = 16;
+inline constexpr uint32_t kCOrderGroupCommandBytesSize = 0x60;
+inline constexpr uint32_t kCOrderGroupCommandVtableSlotCan = 9;
+inline constexpr uint32_t kCOrderGroupCommandVtableSlotDo = 10;
+inline constexpr uint32_t kCArmyGroupCommandCtorBRva = 0x0181b880;
+inline constexpr uint8_t kCArmyGroupCommandCtorBBytes[] = {
+    0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x4C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC,
+    0x30};
+inline constexpr uint32_t kCArmyGroupCommandCtorBByteCount = 15;
+inline constexpr uint32_t kCArmyGroupCommandBytesSize = 0x80;
+inline constexpr uint32_t kCArmyGroupCommandVtableSlotCan = 9;
+inline constexpr uint32_t kCArmyGroupCommandVtableSlotDo = 10;
+
+// CAIGeneral[13] 0x0107D9C0. rcx is the general. Calls 0x01081FE0 three times
+// then 0x01058380 -> AG/army posters. Do not skip the whole [13]: micro-move
+// is already filtered at 0x01A31660. Set TLS so German theatre/AG/army/front
+// command [9] and posters fail; recruit commands are not these [9]s.
+inline constexpr uint32_t kCAIGeneralOrgRva = 0x0107d9c0;
+inline constexpr uint8_t kCAIGeneralOrgBytes[] = {
+    0x4C, 0x8B, 0xDC, 0x49, 0x89, 0x5B, 0x10, 0x49, 0x89, 0x6B, 0x18, 0x49, 0x89, 0x73,
+    0x20, 0x57};
+inline constexpr uint32_t kCAIGeneralOrgByteCount = 16;
+inline constexpr uint32_t kCAIGeneralOrgHookBytes = 16;
+
+// AI theatre wrapper 0x00EEA3E0. German whole-body skip stopped new theatres
+// and also AI recruit/deploy. Always call original so recruit stays with
+// vanilla AI. Do not skip CTheatre ctor: returning 0 leaves rbx=0 and
+// 0x00EDBC50 reads [rcx+0x24] (observe Germany crashed before SCW).
+// Do not hook CSetTheatreCommand[10] apply 0x00EDBF80 (also CFront 0x00EEE3A0).
+// Do not skip 0x006EB9B0: lea [rcx+0x310];ret, 23 callers, wrapper recruit walk.
+inline constexpr uint32_t kTheatreAiCreateRva = 0x00eea3e0;
+inline constexpr uint8_t kTheatreAiCreateBytes[] = {
+    0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x18, 0x88, 0x50, 0x10, 0x48, 0x89, 0x48, 0x08,
+    0x55, 0x56};
+inline constexpr uint32_t kTheatreAiCreateByteCount = 16;
+inline constexpr uint32_t kTheatreAiCreateHookBytes = 16;
+
+// Collects command groups for a new CTheatre. Only callers: wrapper
+// 0x00EEA800 / 0x00EEA952. rcx is CCountry*. Return count; wrapper does
+// `test eax,eax; jle skip-alloc`. Returning 0 for Germany: no new theatre,
+// recruit still runs (wrapper first half), but AI deploy stops. Do not skip.
+// CSetTheatreCommand[10] does not call this; CCountry[4] 0x006FA752 is ctor
+// from save/read, not CSetTheatre.
+// Steal 16: next insn is `sub rsp, 0x48`. Probe only.
+inline constexpr uint32_t kTheatreCreateGateRva = 0x00ee67f0;
+inline constexpr uint8_t kTheatreCreateGateBytes[] = {
+    0x4C, 0x8B, 0xDC, 0x45, 0x88, 0x4B, 0x20, 0x53, 0x55, 0x57, 0x41, 0x55, 0x41, 0x56,
+    0x41, 0x57};
+inline constexpr uint32_t kTheatreCreateGateByteCount = 16;
+inline constexpr uint32_t kTheatreCreateGateHookBytes = 16;
+
+// CTheatre ctor. Direct callers: 0x00EEA849 / 0x00EEA984 (the wrapper) and
+// 0x006FA752 (inside 0x006F8F50). Steal 14: next insn is `mov [rsp+8], rcx`.
+// Probe only. Do not skip. CSetTheatreCommand[10] is 0x013576C0 assign via
+// 0x00EDBF80; it does not call this ctor.
+inline constexpr uint32_t kCTheatreCtorRva = 0x00ed9f40;
+inline constexpr uint8_t kCTheatreCtorBytes[] = {
+    0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x89, 0x54, 0x24, 0x10};
+inline constexpr uint32_t kCTheatreCtorByteCount = 14;
+inline constexpr uint32_t kCTheatreCtorHookBytes = 14;
+
+// Minister land-org helper. Unique caller 0x010ABA70 (after reinforcement post).
+// GetCountry at +0x46. Do not skip: it is not the theatre ctor and may recruit.
+// Do not hook CFront 0x00EEE3A0 or CArmyGroup 0x00EE10B0.
+inline constexpr uint32_t kLandOrgHelperRva = 0x010b4620;
+inline constexpr uint8_t kLandOrgHelperBytes[] = {
+    0x48, 0x89, 0x54, 0x24, 0x10, 0x48, 0x89, 0x4C, 0x24, 0x08, 0x55, 0x53, 0x56, 0x57,
+    0x41, 0x54};
+inline constexpr uint32_t kLandOrgHelperByteCount = 16;
+inline constexpr uint32_t kLandOrgHelperHookBytes = 16;
+
+// Unique AI poster for CCreateAreaDefenseCommand / CEditAreaDefenseStateCommand.
+// Caller 0x01086CB0 (CAIGeneral[13]/[14] helper). rcx is the general.
+// Skip original for Germany. Do not skip 0x01086CB0: it also calls 0x01A31660.
+// Do not intercept Idler[4] / 0x00F3EAE0; those apply already-posted execute.
+inline constexpr uint32_t kAreaDefenseAiRva = 0x01085e00;
+inline constexpr uint8_t kAreaDefenseAiBytes[] = {
+    0x48, 0x89, 0x4C, 0x24, 0x08, 0x55, 0x53, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41,
+    0x56};
+inline constexpr uint32_t kAreaDefenseAiByteCount = 15;
+inline constexpr uint32_t kAreaDefenseAiHookBytes = 15;
+
+// Unique AI poster for CArmyGroupCommand / CAssignToArmyGroupCommand and
+// COrderGroupCommand ctor A 0x0181DB50. rcx is an org-walk blob, not a
+// vtable object. Skip for Germany via [13]/wrapper TLS. Native commands
+// do not go through here.
+inline constexpr uint32_t kArmyGroupAiRva = 0x0105cce0;
+inline constexpr uint8_t kArmyGroupAiBytes[] = {
+    0x48, 0x8B, 0xC4, 0x4C, 0x89, 0x48, 0x20, 0x4C, 0x89, 0x40, 0x18, 0x48, 0x89, 0x50,
+    0x10};
+inline constexpr uint32_t kArmyGroupAiByteCount = 15;
+inline constexpr uint32_t kArmyGroupAiHookBytes = 15;
+
+// AI poster for COrderGroupCommand ctor B 0x0181DD70 (集团军, not 集团军群).
+// Unique caller 0x0105C430, sibling of 0x0105CCE0. Skip for Germany via TLS.
+// Do not hook Idler-adjacent 0x00F3AE80 (player UI also posts OrderGroup).
+inline constexpr uint32_t kArmyAiRva = 0x0105c5f0;
+inline constexpr uint8_t kArmyAiBytes[] = {
+    0x48, 0x8B, 0xC4, 0x4C, 0x89, 0x48, 0x20, 0x4C, 0x89, 0x40, 0x18, 0x48, 0x89, 0x50,
+    0x10};
+inline constexpr uint32_t kArmyAiByteCount = 15;
+inline constexpr uint32_t kArmyAiHookBytes = 15;
+
+// Second AI OrderGroup ctor B poster. Unique caller 0x01058380. Skip for
+// Germany via TLS. Volunteer [14] also posts via 0x01A5EA30; Germany already
+// skips that tick.
+// Steal 16: next insn is `sub rsp, 0x78`.
+inline constexpr uint32_t kArmyAi2Rva = 0x01059820;
+inline constexpr uint8_t kArmyAi2Bytes[] = {
+    0x40, 0x55, 0x53, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57, 0x48,
+    0x8B, 0xEC};
+inline constexpr uint32_t kArmyAi2ByteCount = 16;
+inline constexpr uint32_t kArmyAi2HookBytes = 16;
 
 }  // namespace hoiv::adapter

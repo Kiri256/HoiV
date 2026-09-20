@@ -44,6 +44,19 @@ inline bool is_known_gamestate_vtable(uint64_t vtable, uint64_t module_base) {
     return vtable == module_base + kCCurrentGameStateVtableRva || vtable == module_base + kCGameStateVtableRva;
 }
 
+inline bool is_country_ai_vtable(uint64_t vtable, uint64_t module_base) {
+    return vtable == module_base + kCCountryAIVtableRva || vtable == module_base + kCCountryAIVtableAltRva;
+}
+
+inline bool is_land_general_vtable(uint64_t vtable, uint64_t module_base) {
+    return vtable == module_base + kCAIGeneralVtableRva ||
+        vtable == module_base + kCAIVolunteerGeneralVtableRva;
+}
+
+inline bool is_military_minister_vtable(uint64_t vtable, uint64_t module_base) {
+    return vtable == module_base + kCAIMilitaryMinisterVtableRva;
+}
+
 inline bool tag_matches(uint32_t player_tag, uint32_t country_tag) {
     return player_tag == country_tag;
 }
@@ -65,8 +78,9 @@ inline bool is_three_letter_tag(const char* text) {
         text[1] <= 'Z' && text[2] >= 'A' && text[2] <= 'Z' && text[3] == '\0';
 }
 
-// BlackICE 00_countries.txt: SWI is the 29th defined tag, TUR the 30th.
-// Live country+8 equals the array index, and countries[0] is the empty slot.
+inline constexpr int32_t kLiveSampleCountryTag = kGermanyTestCountryTag;
+
+// Historical P0 fingerprints. Live capture uses kLiveSampleCountryTag.
 inline constexpr int32_t kSwissTestCountryTag = 29;
 
 // BlackICE strategic region 210 (Switzerland). St. Gallen is 11623.
@@ -288,6 +302,90 @@ inline bool military_minister_create_bytes_match(const uint8_t* bytes) {
     return bytes_equal(bytes, kMilitaryMinisterCreateBytes, kMilitaryMinisterCreateByteCount);
 }
 
+inline bool land_actor_move_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kLandActorMoveBytes, kLandActorMoveByteCount);
+}
+
+inline bool land_actor_mass_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kLandActorMassBytes, kLandActorMassByteCount);
+}
+
+inline bool mass_move_can_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kCMassMoveCommandCanBytes, kCMassMoveCommandCanByteCount);
+}
+
+inline bool land_actor_exec_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kLandActorExecBytes, kLandActorExecByteCount);
+}
+
+inline bool volunteer_tick_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kCAIVolunteerGeneralTickBytes, kCAIVolunteerGeneralTickByteCount);
+}
+
+inline bool land_org_helper_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kLandOrgHelperBytes, kLandOrgHelperByteCount);
+}
+
+inline bool general_org_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kCAIGeneralOrgBytes, kCAIGeneralOrgByteCount);
+}
+
+inline bool set_theatre_can_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kCSetTheatreCommandCanBytes, kCSetTheatreCommandCanByteCount);
+}
+
+inline bool army_group_can_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kCArmyGroupCommandCanBytes, kCArmyGroupCommandCanByteCount);
+}
+
+inline bool assign_army_group_can_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kCAssignToArmyGroupCommandCanBytes, kCAssignToArmyGroupCommandCanByteCount);
+}
+
+inline bool theatre_ai_create_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kTheatreAiCreateBytes, kTheatreAiCreateByteCount);
+}
+
+inline bool theatre_create_gate_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kTheatreCreateGateBytes, kTheatreCreateGateByteCount);
+}
+
+inline bool theatre_ctor_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kCTheatreCtorBytes, kCTheatreCtorByteCount);
+}
+
+inline bool new_front_can_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kCOrderNewFrontCommandCanBytes, kCOrderNewFrontCommandCanByteCount);
+}
+
+inline bool area_defense_ai_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kAreaDefenseAiBytes, kAreaDefenseAiByteCount);
+}
+
+inline bool army_group_ai_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kArmyGroupAiBytes, kArmyGroupAiByteCount);
+}
+
+inline bool army_ai_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kArmyAiBytes, kArmyAiByteCount);
+}
+
+inline bool army_ai2_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kArmyAi2Bytes, kArmyAi2ByteCount);
+}
+
+inline bool order_group_can_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kCOrderGroupCommandCanBytes, kCOrderGroupCommandCanByteCount);
+}
+
+inline bool order_group_ctor_b_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kCOrderGroupCommandCtorBBytes, kCOrderGroupCommandCtorBByteCount);
+}
+
+inline bool army_group_ctor_b_bytes_match(const uint8_t* bytes) {
+    return bytes_equal(bytes, kCArmyGroupCommandCtorBBytes, kCArmyGroupCommandCtorBByteCount);
+}
+
 inline bool is_orders_or_army_group_vtable(uint64_t vtable, uint64_t orders_vt, uint64_t army_vt) {
     return vtable != 0 && (vtable == orders_vt || vtable == army_vt);
 }
@@ -347,9 +445,18 @@ inline bool is_swiss_test_province(int32_t province) {
     return false;
 }
 
-inline bool move_target_ok(int32_t from_province, int32_t to_province) {
-    return from_province == kStGallenProvince && to_province > 0 && to_province < 20000 &&
+inline bool province_id_ok(int32_t province) {
+    return province > 0 && province < 20000;
+}
+
+inline bool swiss_test_move_target_ok(int32_t from_province, int32_t to_province) {
+    return from_province == kStGallenProvince && province_id_ok(to_province) &&
         to_province != from_province && is_swiss_test_province(to_province);
+}
+
+inline bool move_target_ok(int32_t from_province, int32_t to_province) {
+    return province_id_ok(from_province) && province_id_ok(to_province) &&
+        to_province != from_province;
 }
 
 inline void format_country_tag(uint32_t tag, char* out, size_t out_n) {

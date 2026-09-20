@@ -1,4 +1,3 @@
-#include "../../../adapters/hoi4_1_19_blackice_12_1/read_model.hpp"
 #include "../../../bridge/include/version_gate.hpp"
 #include "../../../shared/config/config.hpp"
 #include "../../../shared/identity/identity.hpp"
@@ -10,6 +9,7 @@
 
 #include <windows.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -120,6 +120,7 @@ void apply_config_to_block(hoiv::SharedBlock* block, const hoiv::RuntimeConfig& 
     block->read_only = cfg.read_only;
     block->allow_test_host = cfg.allow_test_host;
     block->max_orders_per_hour = cfg.max_orders_per_hour;
+    block->skip_theatre_ai = cfg.skip_theatre_ai;
 }
 
 int identify(const hoiv::RuntimeConfig& cfg) {
@@ -271,7 +272,7 @@ int run_load(hoiv::RuntimeConfig cfg) {
         return 3;
     }
 
-    println("bridge.dll 已加载，版本识别通过，写入保持禁用。另开终端运行 --status 查看实时读取。");
+    println("bridge.dll 已加载，版本识别通过。另开终端运行 --status 查看实时读取。");
     if (!cfg.planner_exe.empty() && GetFileAttributesW(cfg.planner_exe.c_str()) != INVALID_FILE_ATTRIBUTES) {
         HANDLE planner = nullptr;
         DWORD planner_pid = 0;
@@ -295,32 +296,130 @@ int run_load(hoiv::RuntimeConfig cfg) {
 }
 
 int run_move(int argc, wchar_t** argv) {
+    if (argc < 3) {
+        println("用法: launcher --move <邻省ID>");
+        println("邻省必须与 --status 里 army province 相邻，且不是同一格。");
+        return 2;
+    }
+    wchar_t* end = nullptr;
+    const long parsed = wcstol(argv[2], &end, 10);
+    if (end == argv[2] || *end != L'\0' || parsed <= 0 || parsed >= 20000) {
+        println("邻省ID无效");
+        return 2;
+    }
+    const int32_t to = static_cast<int32_t>(parsed);
+
     hoiv::IpcSession session {};
     if (!hoiv::ipc_open(&session) || session.block == nullptr) {
         println("没有活动的 bridge 会话");
         return 8;
     }
-    int32_t province = hoiv::adapter::kSwissTestMoveProvince;
-    if (argc >= 3) {
-        province = static_cast<int32_t>(_wtoi(argv[2]));
+    if (session.block->schema_version != hoiv::kSchemaVersion) {
+        println("schema 与启动器不一致，新旧启动器不能混用");
+        hoiv::ipc_close(&session);
+        return 1;
     }
-    session.block->pending_move_province = province;
+    if (session.block->write_enabled == 0) {
+        println("写入仍关。要实测必须 enabled=1、read_only=0、max_orders_per_hour>0 后重载 DLL");
+        hoiv::ipc_close(&session);
+        return 1;
+    }
+    if (session.block->player_tag != 1 || session.block->division_ok == 0) {
+        println("先 --status，确认 sample tag=1 且 army 有 id/province，再 --move");
+        hoiv::ipc_close(&session);
+        return 1;
+    }
+
+    session.block->pending_move_province = to;
+    session.block->order_attempts = 0;
+    session.block->order_accepted = 0;
+    session.block->last_order_result = 0;
     session.block->request = static_cast<uint32_t>(hoiv::Request::TestMove);
-    char line[160];
+    for (int i = 0; i < 50 &&
+         session.block->request == static_cast<uint32_t>(hoiv::Request::TestMove);
+         ++i) {
+        Sleep(100);
+    }
+
+    char line[240];
     std::snprintf(
         line,
         sizeof(line),
-        "已请求 TestMove province=%d。writes=%u read_only=%u max_orders=%u",
-        province,
-        session.block->write_enabled,
-        session.block->read_only,
-        session.block->max_orders_per_hour);
+        "move    id=%d gen=%u from=%d to=%d attempts=%u accepted=%u result=%u writes=%u",
+        session.block->division_id,
+        session.block->division_generation,
+        session.block->division_province,
+        to,
+        session.block->order_attempts,
+        session.block->order_accepted,
+        session.block->last_order_result,
+        session.block->write_enabled);
     println(line);
-    if (session.block->write_enabled == 0) {
-        println("写入仍关。要实测必须 enabled=1、read_only=0、max_orders_per_hour>=1 后重载 DLL");
+    if (session.block->last_error[0] != '\0') {
+        println(std::string("error   ") + session.block->last_error);
     }
-    if (session.block->division_province != hoiv::adapter::kStGallenProvince) {
-        println("当前采样不是圣加仑 11623，不会发 Division 6 的单。先开局停在圣加仑再 --move");
+    if (session.block->last_order_result != static_cast<uint32_t>(hoiv::OrderResult::Submitted)) {
+        println("未提交。result 1=Gated 2=SignatureFailed 3=CanExecuteFalse 6=BadTarget 7=NoArmy。不要手控移动。");
+    } else {
+        println("已提交。看该师黄色箭头；再 --status 看 province 是否朝目标变。不要重下单。");
+    }
+    hoiv::ipc_close(&session);
+    return 0;
+}
+
+int run_org(hoiv::Request request, const char* label) {
+    hoiv::IpcSession session {};
+    if (!hoiv::ipc_open(&session) || session.block == nullptr) {
+        println("没有活动的 bridge 会话");
+        return 8;
+    }
+    if (session.block->schema_version != hoiv::kSchemaVersion) {
+        println("schema 与启动器不一致，新旧启动器不能混用");
+        hoiv::ipc_close(&session);
+        return 1;
+    }
+    if (session.block->write_enabled == 0) {
+        println("写入仍关。要实测必须 enabled=1、read_only=0、max_orders_per_hour>0 后重载 DLL");
+        hoiv::ipc_close(&session);
+        return 1;
+    }
+    if (session.block->player_tag != 1 || session.block->division_ok == 0) {
+        println("先 --status，确认 sample tag=1 且 army 有 id/province");
+        hoiv::ipc_close(&session);
+        return 1;
+    }
+
+    session.block->order_attempts = 0;
+    session.block->order_accepted = 0;
+    session.block->last_order_result = 0;
+    session.block->request = static_cast<uint32_t>(request);
+    for (int i = 0; i < 50 && session.block->request == static_cast<uint32_t>(request); ++i) {
+        Sleep(100);
+    }
+
+    char line[240];
+    std::snprintf(
+        line,
+        sizeof(line),
+        "%s id=%d gen=%u attempts=%u accepted=%u result=%u writes=%u",
+        label,
+        session.block->division_id,
+        session.block->division_generation,
+        session.block->order_attempts,
+        session.block->order_accepted,
+        session.block->last_order_result,
+        session.block->write_enabled);
+    println(line);
+    if (session.block->last_error[0] != '\0') {
+        println(std::string("error   ") + session.block->last_error);
+    }
+    if (session.block->last_order_result != static_cast<uint32_t>(hoiv::OrderResult::Submitted)) {
+        println("未提交。result 1=Gated 2=SignatureFailed 3=CanExecuteFalse 6=BadTarget 7=NoArmy。");
+        if (session.block->last_order_result == static_cast<uint32_t>(hoiv::OrderResult::Gated)) {
+            println("Gated：写入关了，或上一单还占着 accepted。启动器现在会清掉测试计数。");
+        }
+    } else {
+        println("已提交。看地图编制栏是否出现新对象。不要重下单。");
     }
     hoiv::ipc_close(&session);
     return 0;
@@ -376,26 +475,7 @@ int run_no_land_ai() {
 }
 
 int run_cancel() {
-    hoiv::IpcSession session {};
-    if (!hoiv::ipc_open(&session) || session.block == nullptr) {
-        println("没有活动的 bridge 会话");
-        return 8;
-    }
-    session.block->request = static_cast<uint32_t>(hoiv::Request::TestCancel);
-    char line[160];
-    std::snprintf(
-        line,
-        sizeof(line),
-        "已请求 TestCancel。writes=%u id=%d gen=%u province=%d",
-        session.block->write_enabled,
-        session.block->division_id,
-        session.block->division_generation,
-        session.block->division_province);
-    println(line);
-    if (session.block->write_enabled == 0) {
-        println("写入仍关。要实测必须 enabled=1、read_only=0、max_orders_per_hour>=2 后重载 DLL");
-    }
-    hoiv::ipc_close(&session);
+    println("瑞士取消已验收，不再发测试单。当前只采德国、只看 probe。");
     return 0;
 }
 
@@ -423,80 +503,94 @@ int run_status() {
         return 8;
     }
     const hoiv::SharedBlock* b = session.block;
-    char line[256];
+    char line[640];
     std::snprintf(
         line,
         sizeof(line),
-        "schema=%u version_ok=%u hooks=%u installs=%u writes=%u disabled=%u error=%u",
+        "gate    schema=%u version_ok=%u hooks=%u installs=%u disabled=%u error=%u writes=%u",
         b->schema_version,
         b->version_ok,
         b->hooks_installed,
         b->hook_actual_installs,
-        b->write_enabled,
         b->disabled,
-        b->error_code);
+        b->error_code,
+        b->write_enabled);
     println(line);
-    println(std::string("sha256=") + b->sha256_hex);
-    println(std::string("product_version=") + b->product_version);
-    println(std::string("last_error=") + b->last_error);
-    char snap[320];
     std::snprintf(
-        snap,
-        sizeof(snap),
-        "read_ok=%u division_ok=%u org_valid=%u started=%u tag=%s/%d countries=%d idx=%d enters=%u vt=%u tagnz=%u hit=%d/%x idler=%x armies=%d units=%d",
+        line,
+        sizeof(line),
+        "ident   %s  %s",
+        b->product_version,
+        b->sha256_hex);
+    println(line);
+    std::snprintf(
+        line,
+        sizeof(line),
+        "sample  tag=%d idx=%d countries=%d started=%u read=%u division=%u org_valid=%u seq=%llu",
+        b->player_tag,
+        b->country_index,
+        b->country_count,
+        b->game_started,
         b->read_ok,
         b->division_ok,
         b->org_valid,
-        b->game_started,
-        b->player_tag_text,
-        b->player_tag,
-        b->country_count,
-        b->country_index,
-        b->hook_enter_count,
-        b->diag_vt_ok,
-        b->diag_tag_nz,
-        b->diag_vote_idx,
-        b->diag_vote_n,
-        b->diag_actor_rva,
-        b->diag_armies,
-        b->diag_units);
-    println(snap);
+        static_cast<unsigned long long>(b->snapshot_sequence));
+    println(line);
     std::snprintf(
-        snap,
-        sizeof(snap),
-        "division_id=%d gen=%u province=%d org=%.3f seq=%llu",
+        line,
+        sizeof(line),
+        "army    id=%d gen=%u province=%d org=%.3f hp=%.1f armies=%d located=%d",
         b->division_id,
         b->division_generation,
         b->division_province,
         static_cast<double>(b->division_organization),
-        static_cast<unsigned long long>(b->snapshot_sequence));
-    println(snap);
+        static_cast<double>(b->division_hp),
+        b->diag_armies,
+        b->diag_units);
+    println(line);
     std::snprintf(
-        snap,
-        sizeof(snap),
-        "org_raw=%lld/%lld org_ui=%.2f/%.2f hp_raw=%lld/%lld hp=%.1f",
-        static_cast<long long>(b->diag_org_current),
-        static_cast<long long>(b->diag_org_max),
-        hoiv::adapter::fixed_point_to_display(b->diag_org_current),
-        hoiv::adapter::fixed_point_to_display(b->diag_org_max),
-        static_cast<long long>(b->diag_hp_current),
-        static_cast<long long>(b->diag_hp_max),
-        static_cast<double>(b->division_hp));
-    println(snap);
-    std::snprintf(
-        snap,
-        sizeof(snap),
-        "order attempts=%u accepted=%u result=%u pending=%d writes=%u land_ai_off=%u path=%u ai_global=%u",
+        line,
+        sizeof(line),
+        "order   attempts=%u accepted=%u result=%u pending=%d",
         b->order_attempts,
         b->order_accepted,
         b->last_order_result,
-        b->pending_move_province,
-        b->write_enabled,
-        b->land_ai_off_count,
-        b->land_ai_path,
-        b->land_ai_global);
-    println(snap);
-    println("org 是 0-1 比例。句柄是 CArmy+0x18 的命令 id/gen。默认不发单");
+        b->pending_move_province);
+    println(line);
+    std::snprintf(
+        line,
+        sizeof(line),
+        "probe   move=%u vt=%x tag=%d skip=%u mass=%u vt=%x tag=%d skip=%u vol=%u vt=%x tag=%d skip=%u org=%u vt=%x tag=%d skip=%u exec=%u skip=%u exec_vt=%x/%x/%x ag=%u vt=%x tag=%d skip=%u cfg_th=%u",
+        b->land_actor_move_enters,
+        b->land_actor_move_vt,
+        b->land_actor_move_tag,
+        b->land_actor_move_skips,
+        b->land_actor_mass_enters,
+        b->land_actor_mass_vt,
+        b->land_actor_mass_tag,
+        b->land_actor_mass_skips,
+        b->land_actor_vol_enters,
+        b->land_actor_vol_vt,
+        b->land_actor_vol_tag,
+        b->land_actor_vol_skips,
+        b->land_actor_org_enters,
+        b->land_actor_org_vt,
+        b->land_actor_org_tag,
+        b->land_actor_org_skips,
+        b->land_actor_exec_enters,
+        b->land_actor_exec_skips,
+        b->land_actor_exec_vt0,
+        b->land_actor_exec_vt1,
+        b->land_actor_exec_vt2,
+        b->land_actor_ag_enters,
+        b->land_actor_ag_vt,
+        b->land_actor_ag_tag,
+        b->land_actor_ag_skips,
+        b->skip_theatre_ai);
+    println(line);
+    if (b->last_error[0] != '\0') {
+        println(std::string("error   ") + b->last_error);
+    }
     hoiv::ipc_close(&session);
     return 0;
 }
@@ -507,9 +601,11 @@ void usage() {
     println("launcher --disable");
     println("launcher --shutdown");
     println("launcher --status");
-    println("launcher --move [province]");
-    println("launcher --cancel");
-    println("launcher --no-land-ai");
+    println("launcher --move <邻省ID>");
+    println("launcher --army");
+    println("launcher --ag");
+    println("只测德国采样师。瑞士 --cancel 已撤。战区/集团军群必须至少挂一个集团军。");
+    println("先 --army。不要对唯一的集团军发 --ag。");
     println("只改 tools\\launcher\\config.ini。build\\config.ini 不读。");
     println("默认: enabled=0, read_only=1, max_orders_per_hour=0");
 }
@@ -563,6 +659,10 @@ int wmain(int argc, wchar_t** argv) {
         code = run_status();
     } else if (action == L"--move") {
         code = run_move(argc, argv);
+    } else if (action == L"--army") {
+        code = run_org(hoiv::Request::TestArmy, "army   ");
+    } else if (action == L"--ag") {
+        code = run_org(hoiv::Request::TestArmyGroup, "ag     ");
     } else if (action == L"--cancel") {
         code = run_cancel();
     } else if (action == L"--no-land-ai") {

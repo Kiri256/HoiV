@@ -4,7 +4,7 @@
 
 namespace hoiv {
 
-inline constexpr uint32_t kSchemaVersion = 1;
+inline constexpr uint32_t kSchemaVersion = 10;
 inline constexpr uint32_t kSharedMagic = 0x56494F48u;  // 'HOIV'
 inline constexpr uint32_t kSharedBlockBytes = 4096;
 
@@ -37,6 +37,8 @@ enum class Request : uint32_t {
     TestMove = 3,
     TestCancel = 4,
     SuppressLandAi = 5,
+    TestArmy = 6,
+    TestArmyGroup = 7,
 };
 
 enum class OrderResult : uint32_t {
@@ -125,7 +127,34 @@ struct SharedBlock {
     uint32_t land_ai_off_count;
     uint8_t land_ai_global;
     uint8_t land_ai_path;
-    uint8_t reserved3[2];
+    uint8_t skip_theatre_ai;
+    uint8_t reserved3;
+    uint32_t land_actor_move_enters;
+    uint32_t land_actor_mass_enters;
+    uint32_t land_actor_exec_enters;
+    int32_t land_actor_exec_tag;
+    uint32_t land_actor_exec_vt0;
+    uint32_t land_actor_exec_vt1;
+    uint32_t land_actor_exec_vt2;
+    uint32_t land_actor_mass_vt;
+    int32_t land_actor_mass_tag;
+    uint32_t land_actor_move_vt;
+    int32_t land_actor_move_tag;
+    uint32_t land_actor_mass_skips;
+    uint32_t land_actor_move_skips;
+    uint32_t land_actor_vol_enters;
+    uint32_t land_actor_vol_vt;
+    int32_t land_actor_vol_tag;
+    uint32_t land_actor_vol_skips;
+    uint32_t land_actor_org_enters;
+    uint32_t land_actor_org_vt;
+    int32_t land_actor_org_tag;
+    uint32_t land_actor_org_skips;
+    uint32_t land_actor_exec_skips;
+    uint32_t land_actor_ag_enters;
+    uint32_t land_actor_ag_vt;
+    int32_t land_actor_ag_tag;
+    uint32_t land_actor_ag_skips;
 };
 
 inline constexpr uint8_t kLandAiPathNone = 0;

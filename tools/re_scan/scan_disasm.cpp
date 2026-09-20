@@ -98,6 +98,10 @@ int main(int argc, char** argv) {
         buf.data() + dos->e_lfanew + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) + nt->FileHeader.SizeOfOptionalHeader);
 
     const uint32_t sites[] = {
+        0x0029e680,
+        0x0029e7b0,
+        0x0107b1ca,
+        0x01a4a994,
         0x013ca298,
         0x013cceec,
         0x005356f0,
@@ -105,7 +109,7 @@ int main(int argc, char** argv) {
         0x00bef935,
     };
     for (uint32_t rva : sites) {
-        dump_rva(rva, 64, 48);
+        dump_rva(rva, 64, 320);
     }
     return 0;
 }

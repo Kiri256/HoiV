@@ -28,6 +28,12 @@ print(hexdump(data, sec, 0x010BB0D0, 80))
 print("\nCAIMilitaryMinister [15] 0x10bd2e0")
 print(hexdump(data, sec, 0x010BD2E0, 64))
 
+print("\nCAIMilitaryMinister [16] 0x10b5de0")
+print(hexdump(data, sec, 0x010B5DE0, 96))
+
+print("\nCAIMilitaryMinister [17] 0x10bd3d0")
+print(hexdump(data, sec, 0x010BD3D0, 96))
+
 print("\nCAIMilitaryMinister [11] 0x204e850")
 print(hexdump(data, sec, 0x0204E850, 48))
 
@@ -70,7 +76,9 @@ n = 0
 while i < end and n < 40:
     if data[i] == 0xE8:
         tgt = rel32_call(i)
-        print(f"  {hex(off_to_rva(sec, i))} call {hex(tgt)}")
+        site = off_to_rva(sec, i)
+        if site is not None and tgt is not None:
+            print(f"  {hex(site)} call {hex(tgt)}")
         n += 1
         i += 5
         continue

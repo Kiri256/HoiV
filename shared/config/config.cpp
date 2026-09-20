@@ -49,6 +49,7 @@ RuntimeConfig default_runtime_config() {
     RuntimeConfig cfg;
     cfg.enabled = 0;
     cfg.read_only = 1;
+    cfg.skip_theatre_ai = 0;
     cfg.max_orders_per_hour = 0;
     cfg.expected_product_version = "1.19.";
     cfg.expected_blackice_version = "12.1.";
@@ -102,6 +103,8 @@ bool load_runtime_config(const std::wstring& path, RuntimeConfig* out, std::stri
                 out->read_only = parse_flag(value, 1);
             } else if (key == "max_orders_per_hour") {
                 out->max_orders_per_hour = parse_u32(value, 0);
+            } else if (key == "skip_theatre_ai") {
+                out->skip_theatre_ai = parse_flag(value, 0);
             }
         } else if (section == "game") {
             if (key == "exe_path") {
@@ -149,6 +152,7 @@ bool save_runtime_config_template(const std::wstring& path) {
         << "enabled=0\n"
         << "read_only=1\n"
         << "max_orders_per_hour=0\n"
+        << "skip_theatre_ai=0\n"
         << "\n"
         << "[game]\n"
         << "exe_path=\n"
